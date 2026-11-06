@@ -5,6 +5,7 @@ plugins {
 
 android {
     namespace = "org.cfm.catscriptor"
+    ndkVersion = "28.2.13676358"
     compileSdk {
         version = release(37)
     }
@@ -58,7 +59,6 @@ android {
 
 dependencies {
     implementation(libs.androidx.appcompat)
-    implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
     implementation(platform(libs.androidx.compose.bom))

@@ -75,7 +75,6 @@ Each stage is a separate module behind an interface:
 
 - WER: `jiwer` against references, with the same normalization on both sides (case, punctuation, ё/е).
 - Measure speed on a real phone only. Record model, quantization, device and thread count.
-- Measure every model or parameter change before and after in `docs/MEASUREMENTS.md`. Claim no improvement without a measurement.
 
 ## Submission
 
