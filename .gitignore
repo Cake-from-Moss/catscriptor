@@ -15,3 +15,13 @@
 local.properties
 .idea
 .omc
+
+# Models (see AGENTS.md: never committed)
+*.gguf
+*.onnx
+*.bin
+app/src/main/assets/models/
+
+# Signing keys
+*.jks
+*.keystore

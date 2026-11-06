@@ -1,32 +1,46 @@
 package org.cfm.catscriptor
 
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.widget.TextView
-import org.cfm.catscriptor.databinding.ActivityMainBinding
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 
-class MainActivity : AppCompatActivity() {
-
-    private lateinit var binding: ActivityMainBinding
+class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-
-        // Example of a call to a native method
-        binding.sampleText.text = stringFromJNI()
+        // Placeholder screen: the text comes through JNI, which proves the native library loads.
+        val nativeGreeting = stringFromJNI()
+        setContent {
+            val colors = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
+            MaterialTheme(colorScheme = colors) {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().safeDrawingPadding(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(text = nativeGreeting)
+                    }
+                }
+            }
+        }
     }
 
-    /**
-     * A native method that is implemented by the 'catscriptor' native library,
-     * which is packaged with this application.
-     */
+    /** Implemented by the 'catscriptor' native library (app/src/main/cpp/native-lib.cpp). */
     external fun stringFromJNI(): String
 
     companion object {
-        // Used to load the 'catscriptor' library on application startup.
         init {
             System.loadLibrary("catscriptor")
         }

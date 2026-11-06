@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -16,11 +17,20 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            // The target phones are 64-bit ARM; other ABIs only inflate the APK.
+            abiFilters += "arm64-v8a"
+        }
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"
             }
         }
+    }
+
+    androidResources {
+        // Stored uncompressed so large models need no inflating when read from assets.
+        noCompress += listOf("bin", "gguf", "onnx")
     }
 
     buildTypes {
@@ -42,7 +52,7 @@ android {
         }
     }
     buildFeatures {
-        viewBinding = true
+        compose = true
     }
 }
 
@@ -51,6 +61,12 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
