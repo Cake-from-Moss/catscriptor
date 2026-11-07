@@ -89,8 +89,8 @@ Corrected text (только строка; метаданные реплики �
 - GGUF копируется из assets в `noBackupFilesDir/models/<id>/` через `BundledModelStore`
   (проверка SHA-256, атомарный move, повторно не копируется). Модель мапится из файла
   (`LLAMA_LOAD_MODE_AUTO` → mmap, `MAP_POPULATE` при загрузке — разовый I/O-всплеск).
-- `n_ctx = 1024`, `n_batch = n_ubatch = 512`, `n_threads = n_threads_batch = 4`,
-  K/V F16. Пиковая добавка к файлу модели — порядка 0,3–0,5 ГB (KV + буферы).
+- `n_ctx = 1024`, `n_batch = n_ubatch = 512`, `n_threads = n_threads_batch = min(4, число ядер)`
+  (`defaultLlamaThreads`: лишние потоки на 1–2 ядрах замедляют генерацию), K/V F16. Пиковая добавка к файлу модели — порядка 0,3–0,5 ГB (KV + буферы).
 - Модель держится в пределах этапа `CORRECT_TEXT`, затем `close()`: сначала `cancel`,
   потом ожидание нативного mutex сессии, `llama_free(ctx)`, `llama_model_free(model)`.
   Освобождение параллельно с активным decode не выполняется никогда.

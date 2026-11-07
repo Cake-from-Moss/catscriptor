@@ -38,7 +38,7 @@ internal interface LlamaBridge {
 /** Параметры загрузки и генерации LLM по умолчанию; см. docs/llm-correction.md. */
 data class LlamaConfig(
     val contextSize: Int = 1024,
-    val threads: Int = 4,
+    val threads: Int = defaultLlamaThreads(Runtime.getRuntime().availableProcessors()),
     /** 0f — жадное декодирование (детерминированно); >0 — top_k/top_p/temp. */
     val temperature: Float = 0f,
     val topP: Float = 0.9f,
@@ -48,3 +48,14 @@ data class LlamaConfig(
     /** Потолок выходных токенов на одну реплику. */
     val maxOutputTokens: Int = 192,
 )
+
+/** Верхняя граница потоков llama.cpp: дальше прирост упирается в пропускную способность памяти. */
+internal const val MAX_LLAMA_THREADS = 4
+
+/**
+ * Число потоков llama.cpp для устройства с [availableProcessors] ядрами.
+ * Потоков не больше, чем ядер: лишние потоки ggml ждут друг друга активным ожиданием
+ * и на 1–2 ядрах (эмулятор, слабый телефон) генерация замедляется в разы.
+ */
+internal fun defaultLlamaThreads(availableProcessors: Int): Int =
+    availableProcessors.coerceIn(1, MAX_LLAMA_THREADS)
