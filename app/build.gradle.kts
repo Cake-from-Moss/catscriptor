@@ -1,7 +1,64 @@
+import java.security.MessageDigest
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+// Проверка выполняется без скачивания: APK обязан содержать проверенную модель.
+val modelManifest = file("src/main/assets/model-manifest.properties")
+val sherpaManifest = rootProject.file("dependencies/sherpa-onnx.properties")
+val sherpa = Properties().apply { sherpaManifest.inputStream().use { load(it) } }
+val sherpaAar = rootProject.file("dependencies/${sherpa.getProperty("file")}")
+val verifyBundledModels = tasks.register("verifyBundledModels") {
+    val manifestFile = modelManifest
+    val libraryFile = sherpaAar
+    val libraryHash = sherpa.getProperty("sha256")
+    val assetsDirectory = layout.projectDirectory.dir("src/main/assets").asFile
+    inputs.file(modelManifest)
+    inputs.file(sherpaManifest)
+    inputs.files(fileTree("src/main/assets/models"))
+    inputs.files(sherpaAar)
+    val licenseManifest = rootProject.file("dependencies/licenses.properties")
+    inputs.file(licenseManifest)
+    inputs.files(fileTree("src/main/assets/third-party"))
+    doLast {
+        fun verify(path: File, expected: String, size: Long? = null) {
+            check(path.isFile) {
+                "Отсутствует ${path.name}. Выполните python3 scripts/prepare_models.py из корня проекта."
+            }
+            check(size == null || path.length() == size) { "Неверный размер: $path" }
+            val hash = MessageDigest.getInstance("SHA-256")
+            path.inputStream().buffered().use { stream ->
+                val buffer = ByteArray(1024 * 1024)
+                while (true) {
+                    val count = stream.read(buffer)
+                    if (count < 0) break
+                    hash.update(buffer, 0, count)
+                }
+            }
+            check(hash.digest().joinToString("") { "%02x".format(it) } == expected) {
+                "Повреждён файл: $path. Повторите python3 scripts/prepare_models.py."
+            }
+        }
+        verify(libraryFile, libraryHash)
+        val manifest = Properties().apply { manifestFile.inputStream().use { load(it) } }
+        manifest.getProperty("files").split(',').forEach { name ->
+            verify(
+                File(assetsDirectory, "${manifest.getProperty("model.directory")}/$name"),
+                manifest.getProperty("$name.sha256"),
+                manifest.getProperty("$name.size").toLong(),
+            )
+        }
+        val licenses = Properties().apply { licenseManifest.inputStream().use { load(it) } }
+        licenses.getProperty("files").split(',').forEach { name ->
+            verify(File(assetsDirectory, "third-party/$name"), licenses.getProperty("$name.sha256"))
+        }
+    }
+}
+
+tasks.named("preBuild") { dependsOn(verifyBundledModels) }
 
 android {
     namespace = "org.cfm.catscriptor"
@@ -36,6 +93,7 @@ android {
 
     buildTypes {
         release {
+            proguardFiles("proguard-rules.pro")
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
@@ -58,6 +116,7 @@ android {
 }
 
 dependencies {
+    implementation(files(sherpaAar))
     implementation(libs.gson)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.lifecycle.runtime.ktx)
