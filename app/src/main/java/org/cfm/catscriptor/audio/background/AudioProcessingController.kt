@@ -14,6 +14,7 @@ data class AudioProcessingState(
     val phase: AudioProcessingPhase = AudioProcessingPhase.IDLE,
     val sampleCount: Long = 0,
     val message: String? = null,
+    // TODO(#8): добавить `progress: PipelineProgress` (и итоговую Transcript), которые публикует сервис.
 )
 
 object AudioProcessingController {

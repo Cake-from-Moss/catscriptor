@@ -100,6 +100,7 @@ internal class PipelineProcessingController(
 
     override suspend fun skipStage(recordingId: String, stage: ProcessingStage) = withContext(dispatcher) {
         // Необязательных этапов пока нет; пропуск появится вместе с пунктуацией/LLM.
+        // TODO(#8): дать оркестратору возможность пропустить необязательный этап (например, LLM-коррекцию) по запросу.
     }
 
     /** Терминальные фазы сервиса привязываются к текущей записи и запускают следующую в очереди. */
@@ -153,6 +154,8 @@ internal class PipelineProcessingController(
         AudioProcessingController.start(appContext, AudioInput(next.documentUri))
     }
 
+    // TODO(#8): собирать stages, overallFraction, remainingMs и partialText из PipelineProgress сервиса,
+    //  а не отдавать все этапы после PREPARE_AUDIO как Pending.
     private fun PipelineEntry.toJob(): ProcessingJob {
         val prepare = when (val current = status) {
             is RecordingStatus.Processing ->
