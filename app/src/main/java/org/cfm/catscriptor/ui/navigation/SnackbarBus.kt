@@ -6,6 +6,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.compositionLocalOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Общий Snackbar над плавающей навигацией. Новое сообщение заменяет текущее,
@@ -18,10 +19,20 @@ class AppSnackbar(val hostState: SnackbarHostState, private val scope: Coroutine
         durationMs: SnackbarDuration = SnackbarDuration.Short,
         onAction: () -> Unit = {},
         onTimeout: () -> Unit = {},
+        timeoutMs: Long? = null,
     ) {
         hostState.currentSnackbarData?.dismiss()
         scope.launch {
-            when (hostState.showSnackbar(message, actionLabel, duration = durationMs)) {
+            // SnackbarDuration знает только 4 и 10 с; точный таймаут (например, 5 с у «Отменить»)
+            // делаем через Indefinite и отмену показа.
+            val result = if (timeoutMs == null) {
+                hostState.showSnackbar(message, actionLabel, duration = durationMs)
+            } else {
+                withTimeoutOrNull(timeoutMs) {
+                    hostState.showSnackbar(message, actionLabel, duration = SnackbarDuration.Indefinite)
+                } ?: SnackbarResult.Dismissed
+            }
+            when (result) {
                 SnackbarResult.ActionPerformed -> onAction()
                 SnackbarResult.Dismissed -> onTimeout()
             }
