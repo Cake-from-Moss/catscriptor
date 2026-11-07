@@ -40,6 +40,8 @@ import org.cfm.catscriptor.native.models.BundledModelSpec
 internal class PipelineProcessingController(
     private val appContext: Context,
     private val store: PipelineStore,
+    /** Число спикеров из настроек, читается при старте каждой записи; null — автоопределение. */
+    private val speakerCount: () -> Int? = { null },
 ) : ProcessingController {
 
     private val dispatcher = Dispatchers.Default.limitedParallelism(1)
@@ -190,7 +192,7 @@ internal class PipelineProcessingController(
         store.update(next.id) {
             it.copy(status = RecordingStatus.Processing(RUN_FRACTION, ProcessingStage.PREPARE_AUDIO))
         }
-        AudioProcessingController.start(appContext, AudioInput(next.documentUri))
+        AudioProcessingController.start(appContext, AudioInput(next.documentUri), speakerCount())
     }
 
     /**

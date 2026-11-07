@@ -28,9 +28,12 @@ object AudioProcessingController {
     private val mutableState = MutableStateFlow(AudioProcessingState())
     val state: StateFlow<AudioProcessingState> = mutableState.asStateFlow()
 
-    /** Повторный запуск до завершения очистки текущей задачи игнорируется. */
+    /**
+     * Повторный запуск до завершения очистки текущей задачи игнорируется.
+     * [speakerCount] — число спикеров из настроек на момент запуска; null — автоопределение.
+     */
     @Synchronized
-    fun start(context: Context, input: AudioInput) {
+    fun start(context: Context, input: AudioInput, speakerCount: Int? = null) {
         if (mutableState.value.phase == AudioProcessingPhase.RUNNING) return
         publish(AudioProcessingState(AudioProcessingPhase.RUNNING, message = "Подготовка аудио…"))
         try {
@@ -39,6 +42,7 @@ object AudioProcessingController {
                 action = AudioProcessingService.ACTION_START
                 data = Uri.parse(input.documentId)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                if (speakerCount != null) putExtra(AudioProcessingService.EXTRA_SPEAKER_COUNT, speakerCount)
             })
         } catch (error: Exception) {
             logProcessingError("Не удалось запустить foreground service", error)

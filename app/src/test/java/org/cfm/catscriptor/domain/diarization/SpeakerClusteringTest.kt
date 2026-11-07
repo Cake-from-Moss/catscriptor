@@ -43,6 +43,64 @@ class SpeakerClusteringTest {
     }
 
     @Test
+    fun targetCountKeepsShortSpeakerThatAutoModeAbsorbs() {
+        // Третий голос звучит 2 окна: «авто» отдаёт их соседу, а заданные 3 спикера их сохраняют.
+        val random = Random(3)
+        val centers = voices(3, random)
+        val order = List(30) { if (it < 15) 0 else 1 } + listOf(2, 2)
+        val labels = SpeakerClustering().cluster(windows(order, centers, random), List(order.size) { 750L }, targetSpeakers = 3)
+        assertSamePartition(order, labels)
+    }
+
+    @Test
+    fun targetCountKeepsNearDuplicateVoicesApart() {
+        // Близкие голоса (косинус центров > 0,8) «авто» склеивает; при заданных 3 спикерах они раздельны.
+        val random = Random(4)
+        val base = voices(1, random)[0]
+        val twin = FloatArray(dimension) { base[it] + (random.nextFloat() * 2 - 1) * 0.1f }
+        val other = voices(1, random)[0]
+        val points = List(20) { noisy(base, random, 0.1f) } + List(20) { noisy(twin, random, 0.1f) } + List(20) { noisy(other, random, 0.1f) }
+        val labels = SpeakerClustering().cluster(points, List(60) { 750L }, targetSpeakers = 3)
+        assertEquals(3, labels.distinct().size)
+        assertEquals(1, labels.takeLast(20).distinct().size)
+    }
+
+    @Test
+    fun targetCountBelowRealNumberMergesVoices() {
+        val random = Random(1)
+        val centers = voices(4, random)
+        val order = List(80) { (it / 5) % 4 }
+        val labels = SpeakerClustering().cluster(windows(order, centers, random), List(80) { 750L }, targetSpeakers = 2)
+        assertEquals(2, labels.distinct().size)
+        // Окна одного голоса не разрываются между кластерами.
+        order.distinct().forEach { voice ->
+            assertEquals(1, order.indices.filter { order[it] == voice }.map { labels[it] }.distinct().size)
+        }
+    }
+
+    @Test
+    fun targetCountInAgglomerativeModeAndAboveWindowCount() {
+        val random = Random(5)
+        val centers = voices(2, random)
+        val order = listOf(0, 0, 0, 1, 1, 1)
+        val points = windows(order, centers, random)
+        assertSamePartition(order, SpeakerClustering().cluster(points, List(6) { 1_000L }, targetSpeakers = 2))
+        // Спикеров не может быть больше окон.
+        assertEquals(6, SpeakerClustering().cluster(points, List(6) { 1_000L }, targetSpeakers = 10).distinct().size)
+        assertEquals(setOf(0), SpeakerClustering().cluster(points, List(6) { 1_000L }, targetSpeakers = 1).toSet())
+    }
+
+    @Test
+    fun targetCountWithSubsampling() {
+        val random = Random(6)
+        val centers = voices(3, random)
+        val order = List(300) { (it / 10) % 3 }
+        val labels = SpeakerClustering(SpeakerClusteringSettings(maxPoints = 60))
+            .cluster(windows(order, centers, random), List(300) { 750L }, targetSpeakers = 3)
+        assertSamePartition(order, labels)
+    }
+
+    @Test
     fun singleVoiceStaysOneSpeaker() {
         val random = Random(2)
         val center = voices(1, random)

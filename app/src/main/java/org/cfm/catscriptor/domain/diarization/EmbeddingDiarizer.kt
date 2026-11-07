@@ -53,6 +53,8 @@ data class EmbeddingDiarizerSettings(
 class EmbeddingDiarizer(
     private val embedderProvider: () -> SpeakerEmbedder,
     private val settings: EmbeddingDiarizerSettings = EmbeddingDiarizerSettings(),
+    /** Число спикеров из настроек; null — автоопределение (см. [SpeakerClustering.cluster]). */
+    private val targetSpeakers: Int? = null,
 ) {
     private val clustering = SpeakerClustering(settings.clustering)
 
@@ -78,7 +80,7 @@ class EmbeddingDiarizer(
             }
         }
         currentCoroutineContext().ensureActive()
-        val labels = clustering.cluster(vectors, embedded.map { it.representsMs })
+        val labels = clustering.cluster(vectors, embedded.map { it.representsMs }, targetSpeakers)
 
         val result = ArrayList<Pair<Int, TimeRange>>()
         for ((index, range) in segments.withIndex()) {

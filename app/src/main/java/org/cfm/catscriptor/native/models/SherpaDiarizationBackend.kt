@@ -78,12 +78,15 @@ internal class SherpaEmbeddingResource(context: Context, private val numThreads:
 class SherpaDiarizationBackend internal constructor(
     private val resource: SherpaEmbeddingResource,
     private val settings: EmbeddingDiarizerSettings,
+    private val targetSpeakers: Int?,
 ) : DiarizationBackend {
+    /** [targetSpeakers] — число спикеров из настроек; null — автоопределение. */
     constructor(
         context: Context,
+        targetSpeakers: Int? = null,
         settings: EmbeddingDiarizerSettings = EmbeddingDiarizerSettings(),
         numThreads: Int = 2,
-    ) : this(SherpaEmbeddingResource(context, numThreads), settings)
+    ) : this(SherpaEmbeddingResource(context, numThreads), settings, targetSpeakers)
 
     private val operation = Mutex()
     private val lifecycle = Any()
@@ -95,7 +98,8 @@ class SherpaDiarizationBackend internal constructor(
                 operation.withLock {
                     checkOpen()
                     currentCoroutineContext().ensureActive()
-                    EmbeddingDiarizer(embedderProvider = { embedder() }, settings = settings).diarize(audio, speech)
+                    EmbeddingDiarizer(embedderProvider = { embedder() }, settings = settings, targetSpeakers = targetSpeakers)
+                        .diarize(audio, speech)
                 }
             }
         } catch (error: Throwable) {

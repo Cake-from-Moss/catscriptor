@@ -24,10 +24,11 @@ import org.cfm.catscriptor.playback.MediaPlayerEngine
  */
 class ProductionAppGraph(context: Context) : AppGraph {
     private val store = PipelineStore()
+    override val settings: SettingsRepository = InMemorySettingsRepository()
 
     override val recordings: RecordingRepository = PipelineRecordingRepository(store)
     override val processing: ProcessingController =
-        PipelineProcessingController(context.applicationContext, store)
+        PipelineProcessingController(context.applicationContext, store) { settings.settings.value.speakerCount }
     override val recorder: RecorderController = org.cfm.catscriptor.recording.androidRecordingController(context, processing)
     override val playback: PlaybackController = MediaPlaybackController(
         audioUri = { id -> store.entry(id)?.takeIf { !it.hidden }?.documentUri },
@@ -42,5 +43,4 @@ class ProductionAppGraph(context: Context) : AppGraph {
         // Тот же FileProvider, что отдаёт записи с микрофона; пути см. res/xml/recording_paths.xml.
         authority = "${context.packageName}.recordings",
     )
-    override val settings: SettingsRepository = InMemorySettingsRepository()
 }

@@ -40,7 +40,8 @@ data class SpeakerClusteringSettings(
 }
 
 /**
- * Кластеризация эмбеддингов голоса без заданного числа спикеров. Детерминирована: k-means
+ * Кластеризация эмбеддингов голоса: число спикеров определяется автоматически или задаётся
+ * пользователем (настройка «Число спикеров»). Детерминирована: k-means
  * инициализируется фиксированным зерном, поэтому один и тот же файл даёт одну и ту же разметку.
  */
 class SpeakerClustering(private val settings: SpeakerClusteringSettings = SpeakerClusteringSettings()) {
@@ -48,38 +49,50 @@ class SpeakerClustering(private val settings: SpeakerClusteringSettings = Speake
     /**
      * @param embeddings эмбеддинги окон (одинаковой размерности, ненулевые).
      * @param durationsMs сколько речи «представляет» каждое окно; нужно для отсева мелких кластеров.
+     * @param targetSpeakers заданное число спикеров; null — автоопределение. При заданном числе
+     *   eigengap и порог AHC не используются, а склейка похожих и отсев мелких кластеров
+     *   отключены: они уменьшили бы число спикеров вопреки выбору пользователя. Кластеров
+     *   получится меньше, только если окон меньше заданного числа.
      * @return метку кластера для каждого окна; метки 0..k-1 без пропусков.
      */
-    fun cluster(embeddings: List<FloatArray>, durationsMs: List<Long>): IntArray {
+    fun cluster(embeddings: List<FloatArray>, durationsMs: List<Long>, targetSpeakers: Int? = null): IntArray {
         require(embeddings.size == durationsMs.size)
+        require(targetSpeakers == null || targetSpeakers >= 1) { "Число спикеров должно быть положительным" }
         if (embeddings.isEmpty()) return IntArray(0)
         val points = embeddings.map(::normalize)
         require(points.all { it.size == points[0].size }) { "Размерность эмбеддингов различается" }
         if (points.size == 1) return IntArray(1)
+        val target = targetSpeakers?.coerceAtMost(points.size)
+        if (target == 1) return IntArray(points.size)
 
         val labels = if (points.size <= settings.maxPoints) {
-            initial(points)
+            initial(points, target)
         } else {
             // Равномерная выборка по времени, затем прикрепление остальных окон к центроидам.
             val stride = points.size.toDouble() / settings.maxPoints
             val sample = (0 until settings.maxPoints).map { (it * stride).toInt() }
-            val sampled = initial(sample.map { points[it] })
+            val sampled = initial(sample.map { points[it] }, target)
             val centroids = centroids(sample.map { points[it] }, sampled)
             IntArray(points.size) { i -> nearest(points[i], centroids) }
         }
-        mergeSimilar(points, labels)
-        absorbMinor(points, durationsMs, labels)
+        if (target == null) {
+            mergeSimilar(points, labels)
+            absorbMinor(points, durationsMs, labels)
+        }
         return compact(labels)
     }
 
-    private fun initial(points: List<DoubleArray>): IntArray =
-        if (points.size < settings.minSpectralPoints) agglomerative(points) else spectral(points)
+    private fun initial(points: List<DoubleArray>, target: Int?): IntArray =
+        if (points.size < settings.minSpectralPoints) agglomerative(points, target) else spectral(points, target)
 
-    /** Средняя связь по косинусу; остановка, когда лучшая пара ближе порога не найдётся. */
-    private fun agglomerative(points: List<DoubleArray>): IntArray {
+    /**
+     * Средняя связь по косинусу. Без [target] остановка, когда лучшая пара ближе порога не найдётся;
+     * с [target] — когда кластеров осталось ровно столько.
+     */
+    private fun agglomerative(points: List<DoubleArray>, target: Int?): IntArray {
         val clusters = points.indices.map { mutableListOf(it) }.toMutableList()
         val similarity = Array(points.size) { i -> DoubleArray(points.size) { j -> dot(points[i], points[j]) } }
-        while (clusters.size > 1) {
+        while (clusters.size > (target ?: 1)) {
             var best = Double.NEGATIVE_INFINITY
             var bestI = -1
             var bestJ = -1
@@ -89,7 +102,7 @@ class SpeakerClustering(private val settings: SpeakerClusteringSettings = Speake
                 val mean = sum / (clusters[i].size * clusters[j].size)
                 if (mean > best) { best = mean; bestI = i; bestJ = j }
             }
-            if (best < settings.ahcSimilarity) break
+            if (target == null && best < settings.ahcSimilarity) break
             clusters[bestI].addAll(clusters[bestJ])
             clusters.removeAt(bestJ)
         }
@@ -101,9 +114,10 @@ class SpeakerClustering(private val settings: SpeakerClusteringSettings = Speake
     /**
      * Спектральная кластеризация 3D-Speaker: матрица косинусного сходства → p-pruning
      * (в каждой строке остаются ближайшие соседи) → симметризация → лапласиан L = D − A →
-     * число спикеров по максимальному разрыву собственных значений → k-means по k первым векторам.
+     * число спикеров по максимальному разрыву собственных значений (или заданное [target]) →
+     * k-means по k первым векторам.
      */
-    private fun spectral(points: List<DoubleArray>): IntArray {
+    private fun spectral(points: List<DoubleArray>, target: Int?): IntArray {
         val n = points.size
         val affinity = Array(n) { i -> DoubleArray(n) { j -> dot(points[i], points[j]) } }
         val keep = maxOf(settings.minPruneNeighbors, n - ((1 - settings.pruneFraction) * n).toInt()).coerceAtMost(n)
@@ -131,12 +145,15 @@ class SpeakerClustering(private val settings: SpeakerClusteringSettings = Speake
             laplacian[i][i] = degree
         }
         val eigen = SymmetricEigen(laplacian)
-        val maxK = minOf(settings.maxSpeakers, n - 1)
-        var k = 1
-        var bestGap = Double.NEGATIVE_INFINITY
-        for (candidate in 1..maxK) {
-            val gap = eigen.values[candidate] - eigen.values[candidate - 1]
-            if (gap > bestGap) { bestGap = gap; k = candidate }
+        val k = target ?: run {
+            val maxK = minOf(settings.maxSpeakers, n - 1)
+            var best = 1
+            var bestGap = Double.NEGATIVE_INFINITY
+            for (candidate in 1..maxK) {
+                val gap = eigen.values[candidate] - eigen.values[candidate - 1]
+                if (gap > bestGap) { bestGap = gap; best = candidate }
+            }
+            best
         }
         if (k == 1) return IntArray(n)
         val features = List(n) { i -> DoubleArray(k) { j -> eigen.vectors[i][j] } }
