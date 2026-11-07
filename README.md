@@ -3,7 +3,7 @@
 Android-приложение для хакатона Nuclear IT Hack. Превращает аудиозаписи разговоров в расшифровку со спикерами и таймкодами. Вся обработка выполняется на устройстве, без интернета.
 
 **Статус:** пользовательский импорт и запись подключены к полному офлайн-пути
-декодирование → Silero VAD → диаризация (pyannote segmentation 3.0 + CAM++, sherpa-onnx) →
+декодирование → Silero VAD → диаризация (эмбеддинги CAM++ через sherpa-onnx + спектральная кластеризация) →
 GigaAM v3 CTC int8 по ходам спикеров → слияние реплик → LLM-коррекция текста →
 готовый транскрипт со спикерами, таймкодами и исправленным текстом (`RecordingStatus.Ready`).
 Готовые записи открываются на экране транскрипта с правкой реплик и имён спикеров.
@@ -141,9 +141,8 @@ Debug APK: `app/build/outputs/apk/debug/app-debug.apk`. Release APK без на�
 | Словарь ASR | GigaAM v3 CTC | 2025-12-16 | Тот же архив | `gigaam-v3-ctc-int8-2025-12-16/tokens.txt` | `17cc514451bcceac9c280068c71502f8448f99e9fb1456b8d0761651fd0392f2` |
 | Лицензия модели | GigaAM MIT | 2025-12-16 | Тот же архив | `gigaam-v3-ctc-int8-2025-12-16/LICENSE` | `f00de6715714c7a63d08639cdbfaa40224eefc407302614bd19f1a8b98c875aa` |
 | VAD | Silero v4, экспорт k2-fsa 16 кГц | SHA-pinned | [ONNX](https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx) | `silero-vad-v4-k2-fsa-9e2449e1/silero_vad.onnx` | `9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6` |
-| Диаризация: сегментация | pyannote segmentation 3.0 int8 (экспорт k2-fsa) | speaker-segmentation-models | [Архив](https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2) | `diarization-pyannote3-int8-campplus-zh-en-adv/segmentation.int8.onnx` | `d582f4b4c6b48205de7e0643c57df0df5615a3c176189be3fc461e9d18827b5d` |
-| Диаризация: эмбеддинги | 3D-Speaker CAM++ zh_en advanced | speaker-recongition-models | [ONNX](https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx) | `diarization-pyannote3-int8-campplus-zh-en-adv/embedding.onnx` | `aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2` |
-| Лицензии диаризации | pyannote MIT; 3D-Speaker Apache-2.0 | см. манифест | `diarization-manifest.properties` | `diarization-pyannote3-int8-campplus-zh-en-adv/LICENSE-*` | см. манифест |
+| Диаризация: эмбеддинги | 3D-Speaker CAM++ zh_en advanced | speaker-recongition-models | [ONNX](https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx) | `speaker-embedding-campplus-zh-en-adv/embedding.onnx` | `aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2` |
+| Лицензия диаризации | 3D-Speaker Apache-2.0 | см. манифест | `diarization-manifest.properties` | `speaker-embedding-campplus-zh-en-adv/LICENSE-3dspeaker` | см. манифест |
 | Лицензия VAD | Silero MIT | v4.0 | [LICENSE](https://raw.githubusercontent.com/snakers4/silero-vad/v4.0/LICENSE) | `silero-vad-v4-k2-fsa-9e2449e1/LICENSE` | `2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b` |
 | LLM-коррекция | Qwen2.5-1.5B-Instruct Q4_K_M | HF main | [GGUF](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf) | `qwen2.5-1.5b-instruct-q4_k_m-2026-11-07/qwen2.5-1.5b-instruct-q4_k_m.gguf` | `6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e` |
 | Лицензия LLM | Apache-2.0 | — | [LICENSE](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/LICENSE) | `qwen2.5-1.5b-instruct-q4_k_m-2026-11-07/LICENSE` | `832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e` |

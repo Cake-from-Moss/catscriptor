@@ -69,11 +69,11 @@ def extract_engine(properties_path):
 
 
 def prepare_diarization():
-    """Pyannote segmentation 3.0 (из архива sherpa) и CAM++ 3D-Speaker; файлы проверяются по SHA-256."""
+    """Эмбеддинги CAM++ 3D-Speaker (и при наличии — файлы из архива); проверка по SHA-256."""
     manifest = properties(ROOT / "app/src/main/assets/diarization-manifest.properties")
     destination = ROOT / "app/src/main/assets" / manifest["model.directory"]
     destination.mkdir(parents=True, exist_ok=True)
-    archive = ROOT / ".model-cache" / Path(manifest["archive.url"]).name
+    archive = ROOT / ".model-cache" / Path(manifest["archive.url"]).name if "archive.url" in manifest else None
     for name in manifest["files"].split(","):
         target = destination / name
         expected = manifest[f"{name}.sha256"]

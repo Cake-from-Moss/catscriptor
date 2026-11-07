@@ -43,11 +43,9 @@ data class BundledModelSpec(
             }
         }
 
+        /** Комплект диаризации: только эмбеддинги CAM++ и их лицензия (кластеризация — в Kotlin). */
         fun readDiarization(input: InputStream): BundledModelSpec {
-            return readFiles(
-                input,
-                setOf("segmentation.int8.onnx", "embedding.onnx", "LICENSE-pyannote", "LICENSE-3dspeaker"),
-            )
+            return readFiles(input, setOf("embedding.onnx", "LICENSE-3dspeaker"))
         }
 
         private fun readFiles(input: InputStream, requiredFiles: Set<String>?): BundledModelSpec {
