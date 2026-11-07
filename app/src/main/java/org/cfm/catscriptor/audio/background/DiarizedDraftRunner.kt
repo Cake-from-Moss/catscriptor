@@ -108,7 +108,8 @@ internal class DiarizedDraftRunner(
             }
             return state
         } catch (error: Exception) {
-            stages[state.stage] = StageStatus.Failed(error.message)
+            // Текст исключения может содержать URI документа (см. AudioProcessingDiagnostics): в UI не отдаём.
+            stages[state.stage] = StageStatus.Failed(null)
             publish(state.copy(stages = snapshot()))
             throw error
         }

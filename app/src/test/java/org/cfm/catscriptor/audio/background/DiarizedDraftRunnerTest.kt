@@ -131,6 +131,8 @@ class DiarizedDraftRunnerTest {
         assertEquals(listOf("decode", "vad.create", "vad.close", "diarizer.create", "diarizer.diarize",
             "diarizer.close", "pcm.close"), fixture.events)
         assertTrue(fixture.states.last().stages.any { it.stage == ProcessingStage.DIARIZE && it.status is StageStatus.Failed })
+        // Текст исключения может содержать URI документа, поэтому в состояние для UI он не попадает.
+        assertEquals(StageStatus.Failed(null), fixture.states.last().stages.single { it.stage == ProcessingStage.DIARIZE }.status)
     }
 
     @Test fun asrCancellationClosesAsrAndPcm() {

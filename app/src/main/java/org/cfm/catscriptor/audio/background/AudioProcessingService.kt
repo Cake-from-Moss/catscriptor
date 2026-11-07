@@ -17,16 +17,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.cfm.catscriptor.MainActivity
 import org.cfm.catscriptor.audio.AndroidAudioDecoder
+import org.cfm.catscriptor.domain.app.ProcessingStage
 import org.cfm.catscriptor.domain.pipeline.AudioInput
 
 class AudioProcessingService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var job: Job? = null
+    private var notificationJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var cancellationMessage = "Подготовка аудио отменена"
 
@@ -56,7 +61,15 @@ class AudioProcessingService : Service() {
             val type = if (Build.VERSION.SDK_INT >= 35) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
                 else ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             // Разрешение уведомлений не является условием запуска foreground service.
-            startForeground(NOTIFICATION_ID, notification(), type)
+            startForeground(NOTIFICATION_ID, notification(ProcessingStage.PREPARE_AUDIO), type)
+            // Уведомление повторяет текущий этап; без разрешения POST_NOTIFICATIONS notify() молча игнорируется.
+            notificationJob = scope.launch {
+                AudioProcessingController.state
+                    .filter { it.phase == AudioProcessingPhase.RUNNING }
+                    .map { it.stage }
+                    .distinctUntilChanged()
+                    .collect { manager.notify(NOTIFICATION_ID, notification(it)) }
+            }
             wakeLock = getSystemService(PowerManager::class.java)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:audioPreparation")
                 .apply { acquire(6 * 60 * 60 * 1000L) }
@@ -80,11 +93,13 @@ class AudioProcessingService : Service() {
                 } catch (_: CancellationException) {
                     outcome = AudioProcessingController.state.value.copy(phase = AudioProcessingPhase.CANCELLED, message = cancellationMessage)
                 } catch (error: Exception) {
-                    // TODO(#8): при PipelineStageException публиковать упавший этап, чтобы UI показал, какой именно.
-                    logProcessingError("Ошибка декодирования аудио", error)
+                    // Упавший этап уже опубликован запускателем в state.stage/state.stages.
+                    logProcessingError("Ошибка обработки аудио", error)
                     outcome = AudioProcessingController.state.value.copy(phase = AudioProcessingPhase.FAILED, message = "Не удалось обработать аудио")
                 } finally {
                     // Декодер уже закрыл PCM и временные файлы; здесь нет приостанавливающих операций.
+                    notificationJob?.cancel()
+                    notificationJob = null
                     releaseWakeLock()
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     job = null
@@ -129,18 +144,27 @@ class AudioProcessingService : Service() {
         wakeLock = null
     }
 
-    private fun notification(): Notification {
+    private fun notification(stage: ProcessingStage): Notification {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val cancel = PendingIntent.getService(this, 1, Intent(this, AudioProcessingService::class.java).setAction(ACTION_CANCEL), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Подготовка аудио")
-            .setContentText("Выделение речи, определение говорящих и распознавание на устройстве")
+            .setContentTitle("Обработка записи на устройстве")
+            .setContentText("Этап ${stage.ordinal + 1} из ${ProcessingStage.entries.size}: ${stageLabel(stage)}")
             .setContentIntent(open)
             .setOngoing(true)
-            .setProgress(0, 0, true)
+            .setProgress(ProcessingStage.entries.size, stage.ordinal, false)
+            .setOnlyAlertOnce(true)
             .addAction(Notification.Action.Builder(null, "Отмена", cancel).build())
             .build()
+    }
+
+    private fun stageLabel(stage: ProcessingStage): String = when (stage) {
+        ProcessingStage.PREPARE_AUDIO -> "подготовка аудио"
+        ProcessingStage.DETECT_SPEECH -> "выделение речи"
+        ProcessingStage.DIARIZE -> "определение говорящих"
+        ProcessingStage.TRANSCRIBE -> "распознавание"
+        ProcessingStage.CORRECT_TEXT -> "исправление текста"
     }
 
     companion object {
