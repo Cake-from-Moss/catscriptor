@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Только каталог временных файлов для «Поделиться»; остальной кэш наружу не отдаётся. -->
+<paths>
+    <cache-path name="exports" path="exports/" />
+</paths>

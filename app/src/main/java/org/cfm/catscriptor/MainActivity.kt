@@ -1,43 +1,41 @@
 package org.cfm.catscriptor
 
+import android.content.Context
+import android.content.res.Configuration
 import android.os.Bundle
+import android.os.LocaleList
+import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.activity.enableEdgeToEdge
+import org.cfm.catscriptor.app.CatscriptorApp
+import org.cfm.catscriptor.ui.navigation.StenografApp
+import org.cfm.catscriptor.ui.theme.StenografTheme
 
 class MainActivity : ComponentActivity() {
 
+    /**
+     * Интерфейс только на русском, поэтому локаль закреплена: иначе на телефоне с английской
+     * системой склонения («2 спикера», «5 минут») и названия месяцев считались бы по-английски.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        val config = Configuration(newBase.resources.configuration)
+        config.setLocales(LocaleList(Locale.forLanguageTag("ru")))
+        super.attachBaseContext(newBase.createConfigurationContext(config))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Placeholder screen: the text comes through JNI, which proves the native library loads.
-        val nativeGreeting = stringFromJNI()
+        enableEdgeToEdge()
+        val graph = (application as CatscriptorApp).graph
         setContent {
-            val colors = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
-            MaterialTheme(colorScheme = colors) {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize().safeDrawingPadding(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(text = nativeGreeting)
-                    }
-                }
+            StenografTheme(dynamicColor = graph.useDynamicColor) {
+                StenografApp(graph)
             }
         }
     }
 
-    /** Implemented by the 'catscriptor' native library (app/src/main/cpp/native-lib.cpp). */
+    /** Реализовано в нативной библиотеке 'catscriptor' (app/src/main/cpp/native-lib.cpp). */
     external fun stringFromJNI(): String
 
     companion object {
