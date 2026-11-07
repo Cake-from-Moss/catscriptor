@@ -76,6 +76,7 @@ class AudioProcessingService : Service() {
                 } catch (_: CancellationException) {
                     outcome = AudioProcessingController.state.value.copy(phase = AudioProcessingPhase.CANCELLED, message = cancellationMessage)
                 } catch (error: Exception) {
+                    // TODO(#8): при PipelineStageException публиковать упавший этап, чтобы UI показал, какой именно.
                     logProcessingError("Ошибка декодирования аудио", error)
                     outcome = AudioProcessingController.state.value.copy(phase = AudioProcessingPhase.FAILED, message = "Не удалось обработать аудио")
                 } finally {
