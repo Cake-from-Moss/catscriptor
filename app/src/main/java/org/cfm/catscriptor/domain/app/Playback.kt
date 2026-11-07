@@ -20,5 +20,9 @@ interface PlaybackController {
     fun pause()
     fun seekTo(positionMs: Long)
     fun setSpeed(speed: Float)
-    fun release()
+    /**
+     * Освобождает плеер, только если в нём всё ещё [recordingId]: уходящий экран не должен
+     * сбросить плеер, который уже загрузил следующий экран.
+     */
+    fun release(recordingId: String)
 }

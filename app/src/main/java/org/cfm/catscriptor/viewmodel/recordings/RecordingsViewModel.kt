@@ -101,5 +101,10 @@ class RecordingsViewModel(
         viewModelScope.launch { repository.restore(recordingId) }
     }
 
+    /** Snackbar «Удалено · Отменить» закрылся без отмены: удаляем окончательно. */
+    fun onDeleteConfirmed(recordingId: String) {
+        viewModelScope.launch { repository.commitDelete(recordingId) }
+    }
+
     private data class Dialogs(val renaming: RecordingSummary? = null, val exportingId: String? = null)
 }

@@ -11,6 +11,7 @@ import org.cfm.catscriptor.app.AppGraph
 import org.cfm.catscriptor.ui.export.ExportSheetRoute
 import org.cfm.catscriptor.ui.navigation.AppNavigator
 import org.cfm.catscriptor.ui.navigation.LocalAppSnackbar
+import org.cfm.catscriptor.ui.navigation.ScopedViewModels
 import org.cfm.catscriptor.ui.navigation.TopTab
 import org.cfm.catscriptor.viewmodel.recordings.RecordingOpenTarget
 import org.cfm.catscriptor.viewmodel.recordings.RecordingsViewModel
@@ -43,6 +44,7 @@ fun RecordingsRoute(graph: AppGraph, navigator: AppNavigator) {
                     message = deletedMessage,
                     actionLabel = undoLabel,
                     onAction = { viewModel.onUndoDelete(summary.id) },
+                    onTimeout = { viewModel.onDeleteConfirmed(summary.id) },
                     timeoutMs = UNDO_TIMEOUT_MS,
                 )
             },
@@ -69,6 +71,8 @@ fun RecordingsRoute(graph: AppGraph, navigator: AppNavigator) {
     }
 
     state.exportingId?.let { recordingId ->
-        ExportSheetRoute(graph = graph, recordingId = recordingId, onDismiss = viewModel::onExportDismiss)
+        ScopedViewModels(key = "export-$recordingId") {
+            ExportSheetRoute(graph = graph, recordingId = recordingId, onDismiss = viewModel::onExportDismiss)
+        }
     }
 }

@@ -75,7 +75,8 @@ class DemoPlaybackController(private val store: DemoStore) : PlaybackController 
         _state.update { it.copy(speed = speed) }
     }
 
-    override fun release() {
+    override fun release(recordingId: String) {
+        if (_state.value.recordingId != recordingId) return
         stopTicker()
         _state.value = PlaybackState()
     }

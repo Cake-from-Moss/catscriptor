@@ -19,6 +19,7 @@ import org.cfm.catscriptor.app.AppGraph
 import org.cfm.catscriptor.ui.export.ExportSheetRoute
 import org.cfm.catscriptor.ui.navigation.AppNavigator
 import org.cfm.catscriptor.ui.navigation.LocalAppSnackbar
+import org.cfm.catscriptor.ui.navigation.ScopedViewModels
 import org.cfm.catscriptor.ui.recordings.TextInputDialog
 import org.cfm.catscriptor.ui.recordings.speakerName
 import org.cfm.catscriptor.viewmodel.transcript.TranscriptDialog
@@ -119,6 +120,8 @@ fun TranscriptRoute(graph: AppGraph, navigator: AppNavigator, recordingId: Strin
     }
 
     if (state.exportOpen && document != null) {
-        ExportSheetRoute(graph = graph, recordingId = recordingId, onDismiss = viewModel::onExportDismiss)
+        ScopedViewModels(key = "export-$recordingId") {
+            ExportSheetRoute(graph = graph, recordingId = recordingId, onDismiss = viewModel::onExportDismiss)
+        }
     }
 }

@@ -54,6 +54,7 @@ private object EmptyRecordingRepository : RecordingRepository {
     override suspend fun rename(recordingId: String, title: String) = Unit
     override suspend fun delete(recordingId: String) = Unit
     override suspend fun restore(recordingId: String) = Unit
+    override suspend fun commitDelete(recordingId: String) = Unit
     override suspend fun renameSpeaker(recordingId: String, speakerId: String, displayName: String) = Unit
     override suspend fun editLineText(recordingId: String, lineId: String, text: String) = Unit
     override suspend fun changeLineSpeaker(recordingId: String, lineId: String, speakerId: String) = Unit
@@ -88,7 +89,7 @@ private class UnavailablePlaybackController : PlaybackController {
     override fun pause() = Unit
     override fun seekTo(positionMs: Long) = Unit
     override fun setSpeed(speed: Float) = Unit
-    override fun release() = Unit
+    override fun release(recordingId: String) = Unit
 }
 
 /** Без расшифровок экспортировать нечего; экран экспорта в этой сборке недостижим. */

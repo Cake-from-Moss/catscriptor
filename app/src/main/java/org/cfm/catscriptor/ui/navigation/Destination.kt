@@ -10,15 +10,16 @@ sealed interface ChildScreen {
     data object Settings : ChildScreen
 }
 
+/** Строковый ключ экрана: для сохранения состояния и для хранилища его ViewModel. */
+internal val ChildScreen.key: String
+    get() = when (this) {
+        is ChildScreen.Transcript -> "transcript:$recordingId"
+        ChildScreen.Settings -> "settings"
+    }
+
 /** Кодирует экран строкой, чтобы он переживал смену конфигурации без Parcelable. */
 internal val ChildScreenSaver = Saver<ChildScreen?, String>(
-    save = { screen ->
-        when (screen) {
-            is ChildScreen.Transcript -> "transcript:${screen.recordingId}"
-            ChildScreen.Settings -> "settings"
-            null -> ""
-        }
-    },
+    save = { screen -> screen?.key.orEmpty() },
     restore = { value ->
         when {
             value.startsWith("transcript:") -> ChildScreen.Transcript(value.removePrefix("transcript:"))

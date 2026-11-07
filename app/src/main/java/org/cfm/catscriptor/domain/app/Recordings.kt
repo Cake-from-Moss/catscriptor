@@ -46,6 +46,7 @@ data class TranscriptLine(
     val text: String,
 )
 
+/** [lines] упорядочены по startMs, как и реплики в pipeline.Transcript. */
 data class TranscriptDocument(
     val recordingId: String,
     val title: String,
@@ -54,7 +55,14 @@ data class TranscriptDocument(
     val speakers: List<SpeakerInfo>,
     val lines: List<TranscriptLine>,
     val bookmarksMs: List<Long> = emptyList(),
-)
+) {
+    init {
+        // Поиск текущей реплики в плеере бинарный и опирается на этот порядок.
+        require(lines.zipWithNext().all { (a, b) -> a.startMs <= b.startMs }) {
+            "Lines must be ordered by start time"
+        }
+    }
+}
 
 /**
  * Библиотека записей. Реализация сама хранит данные; UI только подписывается на потоки.
@@ -68,9 +76,16 @@ interface RecordingRepository {
 
     suspend fun rename(recordingId: String, title: String)
 
-    /** Мягкое удаление: окончательно запись исчезает после таймаута Snackbar. */
+    /**
+     * Мягкое удаление: запись пропадает из списка, но её можно вернуть через [restore],
+     * пока UI не вызовет [commitDelete] (Snackbar «Удалено · Отменить» закрылся без отмены).
+     * Если процесс умер раньше, при следующем запуске такие записи нужно удалить окончательно.
+     */
     suspend fun delete(recordingId: String)
     suspend fun restore(recordingId: String)
+
+    /** Окончательно удаляет запись и её файлы; после этого [restore] ничего не вернёт. */
+    suspend fun commitDelete(recordingId: String)
 
     suspend fun renameSpeaker(recordingId: String, speakerId: String, displayName: String)
     suspend fun editLineText(recordingId: String, lineId: String, text: String)

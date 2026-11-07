@@ -280,6 +280,7 @@ private class FakeRecordings : RecordingRepository {
     override suspend fun rename(recordingId: String, title: String) = Unit
     override suspend fun delete(recordingId: String) = Unit
     override suspend fun restore(recordingId: String) = Unit
+    override suspend fun commitDelete(recordingId: String) = Unit
     override suspend fun renameSpeaker(recordingId: String, speakerId: String, displayName: String) = Unit
     override suspend fun editLineText(recordingId: String, lineId: String, text: String) = Unit
     override suspend fun changeLineSpeaker(recordingId: String, lineId: String, speakerId: String) = Unit

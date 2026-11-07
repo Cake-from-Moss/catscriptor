@@ -49,6 +49,10 @@ class DemoRecordingRepository(private val store: DemoStore) : RecordingRepositor
         store.documents.update { it - recordingId }
     }
 
+    override suspend fun commitDelete(recordingId: String) {
+        trash.remove(recordingId)
+    }
+
     override suspend fun restore(recordingId: String) {
         val (summary, document) = trash.remove(recordingId) ?: return
         if (document != null) store.documents.update { it + (recordingId to document) }

@@ -120,9 +120,11 @@ fun StenografApp(graph: AppGraph) {
                 if (screen != null) {
                     // Surface перехватывает касания, чтобы они не уходили во вкладку под экраном.
                     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-                        when (screen) {
-                            is ChildScreen.Transcript -> TranscriptRoute(graph, navigator, screen.recordingId)
-                            ChildScreen.Settings -> SettingsRoute(graph, navigator)
+                        ScopedViewModels(key = screen.key) {
+                            when (screen) {
+                                is ChildScreen.Transcript -> TranscriptRoute(graph, navigator, screen.recordingId)
+                                ChildScreen.Settings -> SettingsRoute(graph, navigator)
+                            }
                         }
                     }
                 }
