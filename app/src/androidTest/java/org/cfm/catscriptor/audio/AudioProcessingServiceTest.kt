@@ -44,7 +44,11 @@ class AudioProcessingServiceTest {
             }
             await { AudioProcessingController.state.value.phase == AudioProcessingPhase.COMPLETED }
             assertEquals(1_600_000L, AudioProcessingController.state.value.sampleCount)
-            assertTrue(AudioProcessingController.state.value.message.orEmpty().contains("Расшифровка ещё не выполняется"))
+            assertEquals(emptyList<org.cfm.catscriptor.domain.pipeline.AsrSegment>(), AudioProcessingController.state.value.asrDraft)
+            assertTrue(AudioProcessingController.state.value.stages.filter {
+                it.stage == org.cfm.catscriptor.domain.app.ProcessingStage.DIARIZE ||
+                    it.stage == org.cfm.catscriptor.domain.app.ProcessingStage.CORRECT_TEXT
+            }.all { it.status == org.cfm.catscriptor.domain.app.StageStatus.Pending })
             assertCleaned()
             if (screenOff) assertTrue("Экран снова включился до проверки завершения", isScreenOff())
             Log.i(TAG, "Подготовка WAV завершена; screenOff=$screenOff; ресурсы освобождены")
@@ -162,7 +166,7 @@ class AudioProcessingServiceTest {
     ).bufferedReader().use { it.readText() }
 
     private fun await(diagnostic: () -> String = { "" }, condition: () -> Boolean) {
-        val deadline = SystemClock.elapsedRealtime() + 60_000
+        val deadline = SystemClock.elapsedRealtime() + 180_000
         while (!condition()) {
             assertTrue("Истекло время ожидания; состояние=${AudioProcessingController.state.value}; ${diagnostic()}",
                 SystemClock.elapsedRealtime() < deadline)

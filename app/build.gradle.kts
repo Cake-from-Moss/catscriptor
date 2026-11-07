@@ -8,15 +8,21 @@ plugins {
 
 // Проверка выполняется без скачивания: APK обязан содержать проверенную модель.
 val modelManifest = file("src/main/assets/model-manifest.properties")
-val sherpaManifest = rootProject.file("dependencies/sherpa-onnx.properties")
+val vadManifest = file("src/main/assets/vad-manifest.properties")
+val sherpaManifest = rootProject.file(
+    if (providers.gradleProperty("ctcPrototype").orNull == "true") ".model-cache/ctc-prototype.properties"
+    else "dependencies/sherpa-onnx.properties",
+)
 val sherpa = Properties().apply { sherpaManifest.inputStream().use { load(it) } }
 val sherpaAar = rootProject.file("dependencies/${sherpa.getProperty("file")}")
 val verifyBundledModels = tasks.register("verifyBundledModels") {
     val manifestFile = modelManifest
+    val vadManifestFile = vadManifest
     val libraryFile = sherpaAar
     val libraryHash = sherpa.getProperty("sha256")
     val assetsDirectory = layout.projectDirectory.dir("src/main/assets").asFile
     inputs.file(modelManifest)
+    inputs.file(vadManifest)
     inputs.file(sherpaManifest)
     inputs.files(fileTree("src/main/assets/models"))
     inputs.files(sherpaAar)
@@ -43,13 +49,15 @@ val verifyBundledModels = tasks.register("verifyBundledModels") {
             }
         }
         verify(libraryFile, libraryHash)
-        val manifest = Properties().apply { manifestFile.inputStream().use { load(it) } }
-        manifest.getProperty("files").split(',').forEach { name ->
-            verify(
-                File(assetsDirectory, "${manifest.getProperty("model.directory")}/$name"),
-                manifest.getProperty("$name.sha256"),
-                manifest.getProperty("$name.size").toLong(),
-            )
+        listOf(manifestFile, vadManifestFile).forEach { modelFile ->
+            val manifest = Properties().apply { modelFile.inputStream().use { load(it) } }
+            manifest.getProperty("files").split(',').forEach { name ->
+                verify(
+                    File(assetsDirectory, "${manifest.getProperty("model.directory")}/$name"),
+                    manifest.getProperty("$name.sha256"),
+                    manifest.getProperty("$name.size").toLong(),
+                )
+            }
         }
         val licenses = Properties().apply { licenseManifest.inputStream().use { load(it) } }
         licenses.getProperty("files").split(',').forEach { name ->

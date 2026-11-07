@@ -65,24 +65,20 @@ class AudioProcessingService : Service() {
             job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
                 var outcome = AudioProcessingState(AudioProcessingPhase.CANCELLED, message = cancellationMessage)
                 try {
-                    // TODO(#8): заменить одно декодирование на PipelineOrchestrator.run(input), когда появятся
-                    //  реализации VAD/ASR/диаризации/LLM; передавать orchestrator.progress в AudioProcessingController
-                    //  и публиковать готовую Transcript.
-                    val count = withContext(Dispatchers.IO) {
-                        AndroidAudioDecoder(this@AudioProcessingService).decode(input).use { pcm ->
-                            // Будущий pipeline должен потреблять PCM внутри use, не сохраняя источник.
-                            pcm.sampleCount
-                        }
+                    outcome = withContext(Dispatchers.IO) {
+                        AsrDraftRunner(AndroidAudioDecoder(this@AudioProcessingService),
+                            { org.cfm.catscriptor.native.models.SherpaVoiceActivityDetector(this@AudioProcessingService) },
+                            { org.cfm.catscriptor.native.models.SherpaTranscriptionBackend(this@AudioProcessingService) },
+                            android.os.SystemClock::elapsedRealtime,
+                        ).run(input, AudioProcessingController::publish)
                     }
                     ensureActive()
-                    outcome = AudioProcessingState(AudioProcessingPhase.COMPLETED, count,
-                        "Аудио подготовлено: $count отсчётов. Расшифровка ещё не выполняется.")
                 } catch (_: CancellationException) {
-                    outcome = AudioProcessingState(AudioProcessingPhase.CANCELLED, message = cancellationMessage)
+                    outcome = AudioProcessingController.state.value.copy(phase = AudioProcessingPhase.CANCELLED, message = cancellationMessage)
                 } catch (error: Exception) {
                     // TODO(#8): при PipelineStageException публиковать упавший этап, чтобы UI показал, какой именно.
                     logProcessingError("Ошибка декодирования аудио", error)
-                    outcome = AudioProcessingState(AudioProcessingPhase.FAILED, message = "Не удалось подготовить аудио")
+                    outcome = AudioProcessingController.state.value.copy(phase = AudioProcessingPhase.FAILED, message = "Не удалось обработать аудио")
                 } finally {
                     // Декодер уже закрыл PCM и временные файлы; здесь нет приостанавливающих операций.
                     releaseWakeLock()
@@ -135,8 +131,7 @@ class AudioProcessingService : Service() {
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("Подготовка аудио")
-            // TODO(#8): показывать текущий этап и определённый прогресс из PipelineProgress; обновлять через notify().
-            .setContentText("Декодирование на устройстве; расшифровка ещё не выполняется")
+            .setContentText("Подготовка, выделение речи и распознавание на устройстве")
             .setContentIntent(open)
             .setOngoing(true)
             .setProgress(0, 0, true)

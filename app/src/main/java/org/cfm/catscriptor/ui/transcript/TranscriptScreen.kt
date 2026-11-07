@@ -126,7 +126,8 @@ fun TranscriptScreen(
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         TopBar(
             document = document,
-            searchOpen = state.searchOpen,
+            draft = document?.asrDraft != null,
+            searchOpen = state.searchOpen && document?.asrDraft == null,
             searchQuery = searchQuery,
             matchCount = state.search.matchIds.size,
             focusedMatch = state.search.focusedIndex,
@@ -140,9 +141,20 @@ fun TranscriptScreen(
                 modifier = Modifier.weight(1f),
             )
             else -> {
-                SpeakerChips(document.speakers, onClick = actions.onSpeakerClick)
+                val draft = document.asrDraft
+                if (draft != null) {
+                    DraftNotice()
+                } else {
+                    SpeakerChips(document.speakers, onClick = actions.onSpeakerClick)
+                }
                 Box(Modifier.weight(1f)) {
-                    if (document.lines.isEmpty()) {
+                    if (draft != null) {
+                        if (draft.isEmpty()) {
+                            MessageState(title = stringResource(R.string.transcript_asr_empty), body = null)
+                        } else {
+                            AsrDraftLines(draft)
+                        }
+                    } else if (document.lines.isEmpty()) {
                         MessageState(title = stringResource(R.string.transcript_empty_body), body = null)
                     } else {
                         TranscriptLines(
@@ -165,15 +177,17 @@ fun TranscriptScreen(
                         }
                     }
                 }
-                val segments = remember(document.lines, state.playback.durationMs) {
-                    trackSegments(document.lines, state.playback.durationMs)
+                if (draft == null) {
+                    val segments = remember(document.lines, state.playback.durationMs) {
+                        trackSegments(document.lines, state.playback.durationMs)
+                    }
+                    PlayerBar(
+                        playback = state.playback,
+                        segments = segments,
+                        followPlayback = state.followPlayback,
+                        actions = actions.player,
+                    )
                 }
-                PlayerBar(
-                    playback = state.playback,
-                    segments = segments,
-                    followPlayback = state.followPlayback,
-                    actions = actions.player,
-                )
             }
         }
     }
@@ -182,6 +196,7 @@ fun TranscriptScreen(
 @Composable
 private fun TopBar(
     document: TranscriptDocument?,
+    draft: Boolean,
     searchOpen: Boolean,
     searchQuery: String,
     matchCount: Int,
@@ -230,7 +245,7 @@ private fun TopBar(
                             )
                         }
                     }
-                    if (document != null) {
+                    if (document != null && !draft) {
                         IconButton(onClick = actions.onSearchOpen) {
                             Icon(AppIcons.Search, contentDescription = stringResource(R.string.transcript_search))
                         }
@@ -239,6 +254,48 @@ private fun TopBar(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DraftNotice() {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = StenografDimens.ScreenPadding, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            stringResource(R.string.transcript_asr_draft),
+            style = StenografType.label,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            stringResource(R.string.transcript_asr_pending_stages),
+            style = StenografType.meta,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun AsrDraftLines(draft: List<org.cfm.catscriptor.domain.pipeline.AsrSegment>) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        itemsIndexed(draft, key = { index, segment -> "${segment.time.startMs}-$index" }) { _, segment ->
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    stringResource(R.string.transcript_asr_interval, formatTimecode(segment.time.startMs), formatTimecode(segment.time.endMs)),
+                    style = StenografType.timecode,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(segment.text, style = StenografType.body, color = MaterialTheme.colorScheme.onSurface)
             }
         }
     }

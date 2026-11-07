@@ -31,8 +31,8 @@ import org.cfm.catscriptor.domain.pipeline.PcmAudioSource
 import org.cfm.catscriptor.native.models.BundledModelSpec
 
 /**
- * Очередь обработки поверх AudioProcessingService. Этап PREPARE_AUDIO реален; когда
- * появятся VAD/ASR/диаризация/LLM, их состояния добавляются в [PipelineEntry] и в [toJob].
+ * Очередь реальных PREPARE_AUDIO → VAD → ASR поверх AudioProcessingService.
+ * Диаризация и LLM ещё не выполнены: результат остаётся промежуточным черновиком.
  * Все изменения записей идут в одном потоке [dispatcher], чтобы не гнать гонки с сервисом.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -60,7 +60,7 @@ internal class PipelineProcessingController(
 
     override fun observeJobs(): Flow<List<ProcessingJob>> = store.entries.map { map ->
         map.values.asSequence()
-            .filter { !it.hidden && it.status != RecordingStatus.Ready }
+            .filter { !it.hidden && it.status != RecordingStatus.Ready && it.status != RecordingStatus.AsrReady }
             .sortedByDescending { it.status is RecordingStatus.Processing }
             .map { it.toJob() }
             .toList()
@@ -94,7 +94,8 @@ internal class PipelineProcessingController(
     }
 
     override suspend fun retry(recordingId: String) = withContext(dispatcher) {
-        store.update(recordingId) { it.copy(status = RecordingStatus.Queued, prepareFailure = null) }
+        if (currentId == recordingId) return@withContext
+        store.update(recordingId) { it.copy(status = RecordingStatus.Queued, prepareFailure = null, processingState = null) }
         pump()
     }
 
@@ -106,13 +107,21 @@ internal class PipelineProcessingController(
     /** Терминальные фазы сервиса привязываются к текущей записи и запускают следующую в очереди. */
     private suspend fun onServiceState(state: AudioProcessingState) {
         when (state.phase) {
-            AudioProcessingPhase.RUNNING, AudioProcessingPhase.IDLE -> Unit
+            AudioProcessingPhase.IDLE -> Unit
+            AudioProcessingPhase.RUNNING -> currentId?.let { id ->
+                store.update(id) { it.copy(
+                    status = RecordingStatus.Processing((state.stage.ordinal + 0.5f) / ProcessingStage.entries.size, state.stage),
+                    durationMs = state.sampleCount * 1000L / PcmAudioSource.SAMPLE_RATE_HZ,
+                    processingState = state,
+                ) }
+            }
             AudioProcessingPhase.COMPLETED -> {
                 val id = currentId ?: return
                 currentId = null
                 store.update(id) {
                     it.copy(
-                        status = RecordingStatus.Ready,
+                        status = RecordingStatus.AsrReady,
+                        processingState = state,
                         durationMs = state.sampleCount * 1000L / PcmAudioSource.SAMPLE_RATE_HZ,
                         prepareElapsedMs = SystemClock.elapsedRealtime() - stageStartedAtMs,
                     )
@@ -124,7 +133,8 @@ internal class PipelineProcessingController(
                 currentId = null
                 store.update(id) {
                     it.copy(
-                        status = RecordingStatus.Failed(ProcessingStage.PREPARE_AUDIO),
+                        status = RecordingStatus.Failed(state.stage),
+                        processingState = state,
                         prepareFailure = state.message,
                         prepareElapsedMs = SystemClock.elapsedRealtime() - stageStartedAtMs,
                     )
@@ -142,7 +152,7 @@ internal class PipelineProcessingController(
 
     /** Стартует первую ожидающую запись, если сервис свободен. Вызывать только из [dispatcher]. */
     private fun pump() {
-        if (AudioProcessingController.state.value.phase == AudioProcessingPhase.RUNNING) return
+        if (currentId != null || AudioProcessingController.state.value.phase == AudioProcessingPhase.RUNNING) return
         val next = store.entries.value.values.firstOrNull {
             !it.hidden && it.status == RecordingStatus.Queued
         } ?: return
@@ -164,7 +174,7 @@ internal class PipelineProcessingController(
                 StageProgress(ProcessingStage.PREPARE_AUDIO, StageStatus.Failed(prepareFailure))
             RecordingStatus.Queued ->
                 StageProgress(ProcessingStage.PREPARE_AUDIO, StageStatus.Pending)
-            RecordingStatus.Ready ->
+            RecordingStatus.Ready, RecordingStatus.AsrReady ->
                 StageProgress(ProcessingStage.PREPARE_AUDIO, StageStatus.Done(prepareElapsedMs))
         }
         val rest = ProcessingStage.entries
@@ -177,14 +187,14 @@ internal class PipelineProcessingController(
             fileExtension = fileExtension,
             durationMs = durationMs,
             overallFraction = when (status) {
-                is RecordingStatus.Processing -> RUN_FRACTION
-                is RecordingStatus.Failed -> RUN_FRACTION
+                is RecordingStatus.Processing -> status.fraction
+                is RecordingStatus.Failed -> status.stage.ordinal.toFloat() / ProcessingStage.entries.size
                 RecordingStatus.Queued -> 0f
-                RecordingStatus.Ready -> DONE_FRACTION
+                RecordingStatus.Ready, RecordingStatus.AsrReady -> DONE_FRACTION
             },
-            stages = listOf(prepare) + rest,
+            stages = processingState?.stages?.takeIf { it.isNotEmpty() } ?: (listOf(prepare) + rest),
             remainingMs = null,
-            partialText = "",
+            partialText = processingState?.partialText.orEmpty(),
         )
     }
 
@@ -194,14 +204,18 @@ internal class PipelineProcessingController(
     /** Модели нужны этапам после PREPARE_AUDIO; проверяем комплект без распаковки в файловую систему. */
     private fun checkModels(): ModelsStatus {
         return try {
-            val spec = appContext.assets.open(MODEL_MANIFEST).use { BundledModelSpec.read(it) }
+            for (manifest in listOf(MODEL_MANIFEST, "vad-manifest.properties")) {
+            val spec = appContext.assets.open(manifest).use {
+                if (manifest == MODEL_MANIFEST) BundledModelSpec.read(it) else BundledModelSpec.readVad(it)
+            }
             val broken = spec.files.firstOrNull { file ->
                 appContext.assets.open("${spec.assetDirectory}/${file.name}").use {
                     it.available().toLong() != file.size
                 }
             }
-            if (broken == null) ModelsStatus.Ready
-            else ModelsStatus.Unavailable("Повреждён файл модели: ${broken.name}")
+            if (broken != null) return ModelsStatus.Unavailable("Повреждён файл модели: ${broken.name}")
+            }
+            ModelsStatus.Ready
         } catch (error: Exception) {
             ModelsStatus.Unavailable(error.message)
         }

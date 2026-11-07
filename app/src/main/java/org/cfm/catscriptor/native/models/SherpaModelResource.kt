@@ -17,6 +17,7 @@ data class SherpaDiagnosticResult(
     val text: String,
     val tokens: List<String>,
     val timestampsSeconds: List<Float>,
+    val ctcPosterior: CtcPosterior? = null,
 )
 
 /**
@@ -35,8 +36,9 @@ class SherpaModelResource(context: Context, private val numThreads: Int = 2) : M
         require(numThreads in 1..8) { "Число потоков должно быть от 1 до 8" }
     }
 
-    /** Диагностика короткого 16 кГц mono PCM; полный ASR-backend относится к issue #5. */
-    suspend fun diagnose(samples: FloatArray): SherpaDiagnosticResult = withContext(Dispatchers.IO) {
+    /** Одна порция 16 кГц mono PCM; posterior запрашивается только для экспериментальной диагностики. */
+    suspend fun diagnose(samples: FloatArray, includeCtcFrames: Boolean = false): SherpaDiagnosticResult = try {
+        withContext(Dispatchers.IO) {
         require(samples.isNotEmpty() && samples.size <= 25 * 16000) {
             "Диагностика принимает от одного сэмпла до 25 секунд PCM"
         }
@@ -67,16 +69,23 @@ class SherpaModelResource(context: Context, private val numThreads: Int = 2) : M
             coroutine.ensureActive()
             val stream = engine.createStream()
             try {
+                if (includeCtcFrames) stream.setOption(CtcPosterior.OPTION, "request")
                 stream.acceptWaveform(samples, 16000)
                 coroutine.ensureActive()
                 engine.decode(stream)
                 coroutine.ensureActive()
                 val result = engine.getResult(stream)
-                SherpaDiagnosticResult(result.text, result.tokens.toList(), result.timestamps.toList())
+                val posterior = if (includeCtcFrames) CtcPosterior.parse(stream.getOption(CtcPosterior.OPTION)) else null
+                coroutine.ensureActive()
+                SherpaDiagnosticResult(result.text, result.tokens.toList(), result.timestamps.toList(), posterior)
             } finally {
                 stream.release()
             }
         }
+        }
+    } catch (error: Throwable) {
+        close()
+        throw error
     }
 
     override fun close() = synchronized(lock) {

@@ -36,6 +36,7 @@ object TranscriptRendering {
         useSpeakerNames: Boolean,
         defaultSpeakerName: (Int) -> String,
     ): String = buildString {
+        require(document.asrDraft == null) { "ASR draft cannot be exported" }
         append(document.title).append('\n').append('\n')
         for (line in document.lines.sortedBy { it.startMs }) {
             val speaker = speakerLabel(line.speakerId, document.speakers, useSpeakerNames, defaultSpeakerName)
@@ -50,6 +51,7 @@ object TranscriptRendering {
         useSpeakerNames: Boolean,
         defaultSpeakerName: (Int) -> String,
     ): String = buildString {
+        require(document.asrDraft == null) { "ASR draft cannot be exported" }
         document.lines.sortedBy { it.startMs }.forEachIndexed { index, line ->
             val speaker = speakerLabel(line.speakerId, document.speakers, useSpeakerNames, defaultSpeakerName)
             if (index > 0) append('\n')
@@ -64,6 +66,7 @@ object TranscriptRendering {
      * предпросмотра нечитаема. Имена спикеров сюда не передаются — в JSON всегда `speaker_N`.
      */
     fun renderJsonPretty(document: TranscriptDocument): String {
+        require(document.asrDraft == null) { "ASR draft cannot be exported" }
         val out = StringWriter()
         JsonWriter(out).use { json ->
             json.setIndent("  ")

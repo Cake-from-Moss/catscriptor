@@ -3,7 +3,6 @@ package org.cfm.catscriptor.app
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.cfm.catscriptor.domain.app.RecordingFilter
@@ -14,8 +13,8 @@ import org.cfm.catscriptor.domain.app.RecordingSummary
 import org.cfm.catscriptor.domain.app.TranscriptDocument
 
 /**
- * Библиотека записей поверх [PipelineStore]. Расшифровки пока не производятся:
- * [observeTranscript] честно отдаёт null, а правки реплик/спикеров — no-op.
+ * Библиотека записей поверх [PipelineStore]. ASR-черновики доступны только для чтения;
+ * правки реплик и спикеров появятся вместе с финальным пайплайном.
  * Хранение в памяти процесса: после его смерти «мягко удалённые» записи
  * исчезают сами, что эквивалентно финальной очистке из контракта репозитория.
  */
@@ -34,13 +33,21 @@ internal class PipelineRecordingRepository(
                 .filter { matchesFilter(it.status, query.filter) }
                 .filter { summary ->
                     query.text.isBlank() ||
-                        summary.title.contains(query.text.trim(), ignoreCase = true)
+                        summary.title.contains(query.text.trim(), ignoreCase = true) ||
+                        map[summary.id]?.processingState?.asrDraft.orEmpty().any {
+                            it.text.contains(query.text.trim(), ignoreCase = true)
+                        }
                 }
                 .sortedByDescending { it.createdAtEpochMs }
                 .toList()
         }
 
-    override fun observeTranscript(recordingId: String): Flow<TranscriptDocument?> = flowOf(null)
+    override fun observeTranscript(recordingId: String): Flow<TranscriptDocument?> = store.entries.map { entries ->
+        entries[recordingId]?.takeIf { !it.hidden && it.status == RecordingStatus.AsrReady }?.let { entry ->
+            TranscriptDocument(entry.id, entry.title, entry.createdAtEpochMs, entry.durationMs,
+                emptyList(), emptyList(), asrDraft = entry.processingState?.asrDraft ?: emptyList())
+        }
+    }
 
     override suspend fun rename(recordingId: String, title: String) = withContext(dispatcher) {
         store.update(recordingId) { it.copy(title = title) }
@@ -66,7 +73,7 @@ internal class PipelineRecordingRepository(
 
     private fun matchesFilter(status: RecordingStatus, filter: RecordingFilter): Boolean = when (filter) {
         RecordingFilter.ALL -> true
-        RecordingFilter.READY -> status == RecordingStatus.Ready
-        RecordingFilter.PROCESSING -> status != RecordingStatus.Ready
+        RecordingFilter.READY -> status == RecordingStatus.Ready || status == RecordingStatus.AsrReady
+        RecordingFilter.PROCESSING -> status != RecordingStatus.Ready && status != RecordingStatus.AsrReady
     }
 }

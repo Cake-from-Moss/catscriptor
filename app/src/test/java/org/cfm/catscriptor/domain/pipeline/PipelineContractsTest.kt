@@ -21,17 +21,13 @@ class PipelineContractsTest {
         val input = AudioInput("content://recordings/dialogue")
         // Ненулевое смещение помогает обнаружить ошибочный отсчёт меток от начала фрагмента.
         val range = TimeRange(10_000, 12_000)
-        val first = TimedWord("Привет", TimeRange(10_100, 10_500))
-        val second = TimedWord("Здравствуйте", TimeRange(11_000, 11_700))
         val speech = listOf(SpeechSegment(range))
-        val recognized = AsrSegment(range, listOf(first, second))
+        val recognized = AsrSegment(range, "Привет, кот")
         val speakers = listOf(
-            SpeakerSegment("speaker_1", TimeRange(10_000, 10_900)),
-            SpeakerSegment("speaker_2", TimeRange(10_900, 12_000)),
+            SpeakerSegment("speaker_1", range),
         )
         val expected = Transcript(listOf(
-            Utterance("speaker_1", 10_100, 10_500, "Привет", listOf(first)),
-            Utterance("speaker_2", 11_000, 11_700, "Здравствуйте", listOf(second)),
+            Utterance("speaker_1", range.startMs, range.endMs, recognized.text),
         ))
         val decoder: AudioDecoder = object : AudioDecoder {
             override suspend fun decode(input: AudioInput): PcmAudioSource {
@@ -68,7 +64,7 @@ class PipelineContractsTest {
         val merger: UtteranceMerger = object : UtteranceMerger {
             override suspend fun merge(asr: List<AsrSegment>, speakers: List<SpeakerSegment>): Transcript {
                 assertEquals(listOf(recognized), asr)
-                assertEquals(2, speakers.size)
+                assertEquals(1, speakers.size)
                 return expected
             }
         }
@@ -83,7 +79,8 @@ class PipelineContractsTest {
                 output: OutputStream,
             ) {
                 assertEquals(TranscriptFormat.TEXT, format)
-                assertEquals(expected.transcript.map { it.words }, transcript.transcript.map { it.words })
+                assertEquals(expected.transcript.map { it.startMs to it.endMs },
+                    transcript.transcript.map { it.startMs to it.endMs })
                 output.write(transcript.transcript.joinToString("\n") { it.text }.toByteArray(Charsets.UTF_8))
             }
         }
@@ -98,7 +95,7 @@ class PipelineContractsTest {
             }
             val output = ByteArrayOutputStream()
             exporter.export(corrected, TranscriptFormat.TEXT, output)
-            assertEquals("Привет!\nЗдравствуйте!", output.toString("UTF-8"))
+            assertEquals("Привет, кот!", output.toString("UTF-8"))
             assertEquals(expected.transcript.map { it.startMs }, corrected.transcript.map { it.startMs })
         }
         assertTrue(audio.closed)
@@ -111,7 +108,7 @@ class PipelineContractsTest {
         var modelClosed = false
         val asr = object : TranscriptionBackend {
             override suspend fun transcribe(audio: PcmAudioSource, segment: SpeechSegment): AsrSegment {
-                throw IllegalStateException("Word alignment unavailable")
+                throw IllegalStateException("ASR inference failed")
             }
             override fun close() { modelClosed = true }
         }
@@ -122,7 +119,7 @@ class PipelineContractsTest {
                 }
             }
         }
-        assertEquals("Word alignment unavailable", error.message)
+        assertEquals("ASR inference failed", error.message)
         assertTrue(modelClosed)
         assertTrue(audio.closed)
     }

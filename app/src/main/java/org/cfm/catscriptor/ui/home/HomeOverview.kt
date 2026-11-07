@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import org.cfm.catscriptor.R
 import org.cfm.catscriptor.domain.app.ProcessingJob
 import org.cfm.catscriptor.domain.app.RecordingSource
+import org.cfm.catscriptor.domain.app.RecordingStatus
 import org.cfm.catscriptor.domain.app.RecordingSummary
 import org.cfm.catscriptor.domain.app.StageStatus
 import org.cfm.catscriptor.ui.components.AppIcons
@@ -230,6 +231,14 @@ private fun RecentRow(summary: RecordingSummary, onClick: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (summary.status == RecordingStatus.AsrReady) {
+                Text(
+                    stringResource(R.string.recordings_asr_ready_meta, formatTimecode(summary.durationMs)),
+                    style = StenografType.timecode,
+                    color = colors.primary,
+                    maxLines = 1,
+                )
+            }
             if (preview != null) {
                 Text(
                     preview,

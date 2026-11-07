@@ -30,3 +30,4 @@ app/src/main/assets/models/
 # Signing keys
 *.jks
 *.keystore
+scripts/__pycache__/

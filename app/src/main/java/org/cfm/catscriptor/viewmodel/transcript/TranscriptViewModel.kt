@@ -178,6 +178,7 @@ class TranscriptViewModel(
     fun onDialogDismiss() = ui.update { it.copy(dialog = null) }
 
     fun onEditTextConfirm(lineId: String, text: String) {
+        if ((document.value as? TranscriptDocument)?.asrDraft != null) return
         onDialogDismiss()
         val normalized = text.trim()
         if (normalized.isEmpty() || lines.firstOrNull { it.id == lineId }?.text == normalized) return
@@ -185,6 +186,7 @@ class TranscriptViewModel(
     }
 
     fun onChangeSpeakerConfirm(lineId: String, speakerId: String) {
+        if ((document.value as? TranscriptDocument)?.asrDraft != null) return
         onDialogDismiss()
         if (lines.firstOrNull { it.id == lineId }?.speakerId == speakerId) return
         viewModelScope.launch { repository.changeLineSpeaker(recordingId, lineId, speakerId) }
@@ -192,13 +194,17 @@ class TranscriptViewModel(
 
     /** Пустое имя возвращает подпись по умолчанию «Спикер N». */
     fun onSpeakerRenameConfirm(speakerId: String, name: String) {
+        if ((document.value as? TranscriptDocument)?.asrDraft != null) return
         onDialogDismiss()
         viewModelScope.launch { repository.renameSpeaker(recordingId, speakerId, name.trim()) }
     }
 
     // Экспорт
 
-    fun onExportOpen() = ui.update { it.copy(exportOpen = true) }
+    fun onExportOpen() {
+        if ((document.value as? TranscriptDocument)?.asrDraft != null) return
+        ui.update { it.copy(exportOpen = true) }
+    }
 
     fun onExportDismiss() = ui.update { it.copy(exportOpen = false) }
 

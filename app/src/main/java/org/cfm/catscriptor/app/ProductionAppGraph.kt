@@ -9,9 +9,10 @@ import org.cfm.catscriptor.domain.app.RecordingRepository
 import org.cfm.catscriptor.domain.app.SettingsRepository
 
 /**
- * Основной граф: импорт и подготовка аудио (этап PREPARE_AUDIO) работают по-настоящему
- * через AudioProcessingService. Запись с микрофона (#21), воспроизведение (#20) и экспорт
- * без расшифровок остаются недоступными — для них граф использует честные заглушки
+ * Основной граф: импорт, подготовка аудио, VAD и ASR работают по-настоящему
+ * через AudioProcessingService. Диаризация и LLM пока не реализованы, поэтому ASR-черновик
+ * не является финальной расшифровкой и не экспортируется. Запись с микрофона и плеер
+ * остаются недоступными — для них граф использует честные заглушки
  * из UnavailableAppGraph, как и раньше.
  */
 class ProductionAppGraph(context: Context) : AppGraph {

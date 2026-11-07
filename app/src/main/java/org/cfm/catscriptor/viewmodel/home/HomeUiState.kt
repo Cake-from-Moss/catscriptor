@@ -88,7 +88,7 @@ fun buildHomeUiState(
         else -> {
             // Записи в обработке уже видны в карточках «В обработке», в «Недавних» только готовые.
             val recents = summaries
-                .filter { it.status == RecordingStatus.Ready }
+                .filter { it.status == RecordingStatus.Ready || it.status == RecordingStatus.AsrReady }
                 .sortedByDescending { it.createdAtEpochMs }
                 .take(RECENTS_LIMIT)
             HomeContent.Overview(

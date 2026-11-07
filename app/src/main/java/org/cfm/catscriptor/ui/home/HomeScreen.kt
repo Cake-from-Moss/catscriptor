@@ -150,6 +150,7 @@ fun HomeScreen(
                     onCollapse = actions.onCollapseJob,
                     onRetry = { actions.onRetryJob(content.job.recordingId) },
                     onSkipStage = { stage -> actions.onSkipStage(content.job.recordingId, stage) },
+                    onOpenResult = { actions.onOpenRecording(content.job.recordingId) },
                 )
                 is HomeContent.LiveFeed -> LiveFeed(
                     lines = content.lines,

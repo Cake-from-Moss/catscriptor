@@ -14,7 +14,10 @@ data class AudioProcessingState(
     val phase: AudioProcessingPhase = AudioProcessingPhase.IDLE,
     val sampleCount: Long = 0,
     val message: String? = null,
-    // TODO(#8): добавить `progress: PipelineProgress` (и итоговую Transcript), которые публикует сервис.
+    val stage: org.cfm.catscriptor.domain.app.ProcessingStage = org.cfm.catscriptor.domain.app.ProcessingStage.PREPARE_AUDIO,
+    val stages: List<org.cfm.catscriptor.domain.app.StageProgress> = emptyList(),
+    val partialText: String = "",
+    val asrDraft: List<org.cfm.catscriptor.domain.pipeline.AsrSegment>? = null,
 )
 
 object AudioProcessingController {
