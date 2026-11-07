@@ -8,7 +8,7 @@ Android-приложение для хакатона Nuclear IT Hack. Превр
 
 В `app/src/main/java/org/cfm/catscriptor/` выделены границы `ui`, `viewmodel`,
 `domain/pipeline` и `native/models`. Пока это контракты, а не рабочий инференс.
-Новых Gradle-модулей и зависимостей нет.
+Новых Gradle-модулей нет. Для экспорта добавлены Gson, Android-корутины и Lifecycle.
 
 - Этапы: `AudioDecoder` → `VoiceActivityDetector` → `TranscriptionBackend` →
   `DiarizationBackend` → `UtteranceMerger` → `TextCorrectionBackend` → `TranscriptExporter`.
@@ -28,7 +28,7 @@ Android-приложение для хакатона Nuclear IT Hack. Превр
 - `Transcript.transcript` отсортирован по началу реплик, перекрытия допустимы.
   Контракт JSON не меняется: экспортируются только `speaker_id`, `start_ms`,
   `end_ms`, `text` внутри `transcript`; внутренние `words` не экспортируются.
-  Реализация экспорта и тест схемы — #2.
+   `DefaultTranscriptExporter` реализует JSON/TEXT, схема проверяется JVM-тестами.
 - Длительные методы — `suspend`. Конкретные реализации должны выполнять тяжёлую
   работу вне UI-потока, поддерживать отмену и передавать ошибки вызывающему коду.
   Оркестрация, прогресс, fallback и настоящие модели здесь ещё не реализованы.
@@ -41,6 +41,51 @@ Android-приложение для хакатона Nuclear IT Hack. Превр
 ./gradlew :app:testDebugUnitTest :app:lintDebug
 ./gradlew assembleDebug assembleRelease test
 ```
+
+## Экспорт JSON и TEXT
+
+`DefaultTranscriptExporter` принимает существующий `Transcript` и пишет UTF-8 в
+переданный `OutputStream`: не закрывает его, не сортирует реплики и не экспортирует
+`words`. Gson `JsonWriter` используется без рефлексии и промежуточного JSON-дерева;
+временные метки записываются как целые `Long`. TEXT использует формат
+`[00:00:01.250 - 00:00:04.380] speaker_1: Добрый день!`, с переводом строки после
+каждой реплики; число часов не ограничено двумя разрядами.
+
+Для будущего экрана результата:
+
+1. В `Activity.onCreate`, до `STARTED`, создать `ContentResolverTranscriptWriter`
+   с `applicationContext.contentResolver` и `DefaultTranscriptExporter()`.
+2. Создать `TranscriptExportController(activity, writer, onResult)`. Обработчик
+   получает `Result<Uri>`: успех либо ошибку открытия/записи/закрытия документа.
+3. На главном потоке вызвать `controller.export(transcript, TranscriptFormat.JSON,
+   "transcript.json")` либо TEXT с именем `transcript.txt`, передав **реальный**
+   результат пайплайна. Возвращаемое `false` означает занятость контроллера.
+4. После пересоздания Activity использовать тот же ключ контроллера. Запрос и
+   запись сохраняются во ViewModel при смене конфигурации, но не при смерти процесса.
+
+Контроллер открывает `CreateDocument` с `application/json` или `text/plain`.
+Отмена выбора не вызывает ошибку или запись. SAF позволяет пользователю самому
+выбрать документ; широкие разрешения на хранилище не нужны. Открытие, запись и
+закрытие потока выполняются на `Dispatchers.IO`; корутины обеспечивают фоновую
+запись и отмену. Текущий стартовый экран намеренно не меняется: готовой расшифровки
+и демонстрационных данных в production-коде нет.
+
+Проверки:
+
+```bash
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+./gradlew :app:connectedDebugAndroidTest
+```
+
+`DefaultTranscriptExporterTest` проверяет схему, экранирование, UTF-8, порядок,
+перекрытия, большие метки и владение потоком. `ContentResolverTranscriptWriterTest`
+использует провайдер только тестового APK: проверяет настоящий ContentResolver,
+фоновую запись, закрытие при успехе/ошибке/отмене, MIME и отмену выбора.
+Внешнее окно DocumentsUI и поворот экрана требуют отдельной ручной проверки
+после подключения к экрану с настоящим `Transcript`. При ошибке провайдер может
+оставить частично записанный документ; блокирующая операция провайдера не всегда
+прерывается сразу при отмене. Поток `null` и ошибка закрытия обработаны кодом,
+но пока не воспроизведены инструментальным тестом.
 
 ## Сборка
 
