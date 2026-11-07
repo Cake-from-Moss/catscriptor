@@ -1,12 +1,8 @@
 package org.cfm.catscriptor.export
 
 import android.app.Activity
-import android.content.ContentProvider
-import android.content.ContentValues
-import android.database.Cursor
 import android.net.Uri
 import android.os.Looper
-import android.os.ParcelFileDescriptor
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -18,26 +14,8 @@ import org.cfm.catscriptor.domain.pipeline.TranscriptFormat
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 import java.io.IOException
 import java.io.OutputStream
-
-/** Настоящий файловый провайдер только тестового APK; внешнее окно SAF не требуется. */
-class ExportTestProvider : ContentProvider() {
-    override fun onCreate() = true
-    override fun getType(uri: Uri) = "application/json"
-    override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
-        if (uri.lastPathSegment == "denied") throw SecurityException("Тестовый запрет")
-        return ParcelFileDescriptor.open(
-            File(requireNotNull(context).cacheDir, "saf-export-test"),
-            ParcelFileDescriptor.parseMode(mode),
-        )
-    }
-    override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
-    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
-    override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?) = 0
-    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?) = 0
-}
 
 @RunWith(AndroidJUnit4::class)
 class ContentResolverTranscriptWriterTest {
