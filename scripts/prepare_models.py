@@ -44,6 +44,46 @@ def download(url, expected, destination):
             temporary.unlink(missing_ok=True)
 
 
+def prepare_diarization():
+    """Pyannote segmentation 3.0 (из архива sherpa) и CAM++ 3D-Speaker; файлы проверяются по SHA-256."""
+    manifest = properties(ROOT / "app/src/main/assets/diarization-manifest.properties")
+    destination = ROOT / "app/src/main/assets" / manifest["model.directory"]
+    destination.mkdir(parents=True, exist_ok=True)
+    archive = ROOT / ".model-cache" / Path(manifest["archive.url"]).name
+    for name in manifest["files"].split(","):
+        target = destination / name
+        expected = manifest[f"{name}.sha256"]
+        size = int(manifest[f"{name}.size"])
+        if target.exists() and target.stat().st_size == size and digest(target) == expected:
+            continue
+        member_key = f"{name}.member"
+        if member_key in manifest:
+            download(manifest["archive.url"], manifest["archive.sha256"], archive)
+            with tarfile.open(archive) as source:
+                member = source.getmember(f"{manifest['archive.root']}/{manifest[member_key]}")
+                if not member.isfile() or member.size != size:
+                    raise ValueError(f"Неверный файл в архиве: {name}")
+                temporary = None
+                try:
+                    with tempfile.NamedTemporaryFile(dir=destination, delete=False) as output:
+                        temporary = Path(output.name)
+                        with source.extractfile(member) as stream:
+                            shutil.copyfileobj(stream, output)
+                    if digest(temporary) != expected:
+                        raise ValueError(f"Неверный SHA-256: {name}")
+                    os.replace(temporary, target)
+                finally:
+                    if temporary is not None:
+                        temporary.unlink(missing_ok=True)
+        else:
+            download(manifest[f"{name}.url"], expected, target)
+            if target.stat().st_size != size:
+                raise ValueError(f"Неверный размер файла диаризации: {name}")
+    # Двухголосый английский пример sherpa нужен только тестовому APK (проверка смены спикера).
+    sample = ROOT / "app/src/androidTest/assets/two-speakers-en.wav"
+    download(manifest["test.wav.url"], manifest["test.wav.sha256"], sample)
+
+
 def main():
     model = properties(ROOT / "app/src/main/assets/model-manifest.properties")
     library = properties(ROOT / "dependencies/sherpa-onnx.properties")
@@ -89,7 +129,8 @@ def main():
         download(vad[f"{name}.url"], vad[f"{name}.sha256"], target)
         if target.stat().st_size != int(vad[f"{name}.size"]):
             raise ValueError(f"Неверный размер VAD-файла: {name}")
-    print("AAR, ASR и VAD подготовлены и проверены.")
+    prepare_diarization()
+    print("AAR, ASR, VAD и диаризация подготовлены и проверены.")
 
 
 if __name__ == "__main__":

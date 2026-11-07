@@ -204,9 +204,13 @@ internal class PipelineProcessingController(
     /** Модели нужны этапам после PREPARE_AUDIO; проверяем комплект без распаковки в файловую систему. */
     private fun checkModels(): ModelsStatus {
         return try {
-            for (manifest in listOf(MODEL_MANIFEST, "vad-manifest.properties")) {
+            for (manifest in listOf(MODEL_MANIFEST, "vad-manifest.properties", "diarization-manifest.properties")) {
             val spec = appContext.assets.open(manifest).use {
-                if (manifest == MODEL_MANIFEST) BundledModelSpec.read(it) else BundledModelSpec.readVad(it)
+                when (manifest) {
+                    MODEL_MANIFEST -> BundledModelSpec.read(it)
+                    "vad-manifest.properties" -> BundledModelSpec.readVad(it)
+                    else -> BundledModelSpec.readDiarization(it)
+                }
             }
             val broken = spec.files.firstOrNull { file ->
                 appContext.assets.open("${spec.assetDirectory}/${file.name}").use {

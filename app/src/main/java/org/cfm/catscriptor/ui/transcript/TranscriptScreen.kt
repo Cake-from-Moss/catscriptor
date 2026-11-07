@@ -143,7 +143,7 @@ fun TranscriptScreen(
             else -> {
                 val draft = document.asrDraft
                 if (draft != null) {
-                    DraftNotice()
+                    DraftNotice(document.asrDraftSpeakers != null)
                 } else {
                     SpeakerChips(document.speakers, onClick = actions.onSpeakerClick)
                 }
@@ -152,7 +152,7 @@ fun TranscriptScreen(
                         if (draft.isEmpty()) {
                             MessageState(title = stringResource(R.string.transcript_asr_empty), body = null)
                         } else {
-                            AsrDraftLines(draft)
+                            AsrDraftLines(draft, document.asrDraftSpeakers)
                         }
                     } else if (document.lines.isEmpty()) {
                         MessageState(title = stringResource(R.string.transcript_empty_body), body = null)
@@ -260,7 +260,7 @@ private fun TopBar(
 }
 
 @Composable
-private fun DraftNotice() {
+private fun DraftNotice(speakersKnown: Boolean) {
     Column(
         Modifier.fillMaxWidth().padding(horizontal = StenografDimens.ScreenPadding, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -271,7 +271,7 @@ private fun DraftNotice() {
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            stringResource(R.string.transcript_asr_pending_stages),
+            stringResource(if (speakersKnown) R.string.transcript_asr_pending_llm else R.string.transcript_asr_pending_stages),
             style = StenografType.meta,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -279,19 +279,24 @@ private fun DraftNotice() {
 }
 
 @Composable
-private fun AsrDraftLines(draft: List<org.cfm.catscriptor.domain.pipeline.AsrSegment>) {
+private fun AsrDraftLines(draft: List<org.cfm.catscriptor.domain.pipeline.AsrSegment>, speakers: List<String>?) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        itemsIndexed(draft, key = { index, segment -> "${segment.time.startMs}-$index" }) { _, segment ->
+        itemsIndexed(draft, key = { index, segment -> "${segment.time.startMs}-$index" }) { index, segment ->
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    stringResource(R.string.transcript_asr_interval, formatTimecode(segment.time.startMs), formatTimecode(segment.time.endMs)),
+                    if (speakers != null) {
+                        stringResource(R.string.transcript_asr_speaker_interval, speakers[index],
+                            formatTimecode(segment.time.startMs), formatTimecode(segment.time.endMs))
+                    } else {
+                        stringResource(R.string.transcript_asr_interval, formatTimecode(segment.time.startMs), formatTimecode(segment.time.endMs))
+                    },
                     style = StenografType.timecode,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

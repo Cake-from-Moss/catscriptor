@@ -11,6 +11,24 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PipelineRecordingRepositoryTest {
+    @Test fun diarizedDraftExposesRealSpeakersAndStaysNonExportable() = runBlocking {
+        val store = PipelineStore()
+        val utterances = listOf(
+            org.cfm.catscriptor.domain.pipeline.Utterance("speaker_1", 1000, 2000, "Привет"),
+            org.cfm.catscriptor.domain.pipeline.Utterance("speaker_2", 2500, 3500, "Здравствуй"),
+        )
+        store.upsert(PipelineEntry("id", "Диалог", "content://audio", "wav", 1, 4000, RecordingStatus.AsrReady,
+            processingState = AudioProcessingState(AudioProcessingPhase.COMPLETED,
+                asrDraft = utterances.map { AsrSegment(TimeRange(it.startMs, it.endMs), it.text) }, speakerDraft = utterances)))
+        val repository = PipelineRecordingRepository(store)
+        val document = requireNotNull(repository.observeTranscript("id").first())
+        assertEquals(listOf("speaker_1", "speaker_2"), document.asrDraftSpeakers)
+        assertNotNull(document.asrDraft)
+        assertTrue(document.lines.isEmpty())
+        val summary = repository.observe().first().single()
+        assertEquals(2, summary.speakerCount)
+    }
+
     @Test fun draftHasMetadataNoSpeakersAndCannotBeEdited() = runBlocking {
         val store = PipelineStore()
         val draft = listOf(AsrSegment(TimeRange(1500, 2500), "Кошачий разговор"))

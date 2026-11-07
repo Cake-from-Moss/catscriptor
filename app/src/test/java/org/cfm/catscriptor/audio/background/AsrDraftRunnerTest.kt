@@ -48,8 +48,10 @@ class AsrDraftRunnerTest {
         assertEquals(AudioProcessingPhase.COMPLETED, result.phase)
         assertEquals("Настоящий контракт\nНастоящий контракт", result.partialText)
         assertEquals(StageStatus.Running(0, 6000), fixture.states.last().stages.single { it.stage == ProcessingStage.TRANSCRIBE }.status)
-        assertTrue(result.stages.take(3).all { it.status is StageStatus.Done })
-        assertTrue(result.stages.drop(3).all { it.status == StageStatus.Pending })
+        // Устаревший черновик #5 не выполняет диаризацию и коррекцию: порядок enum в #6 изменился.
+        val done = setOf(ProcessingStage.PREPARE_AUDIO, ProcessingStage.DETECT_SPEECH, ProcessingStage.TRANSCRIBE)
+        assertTrue(result.stages.filter { it.stage in done }.all { it.status is StageStatus.Done })
+        assertTrue(result.stages.filter { it.stage !in done }.all { it.status == StageStatus.Pending })
     }
 
     @Test fun silenceDoesNotCreateAsrAndStillProducesDraft() = runBlocking {

@@ -45,7 +45,8 @@ internal class PipelineRecordingRepository(
     override fun observeTranscript(recordingId: String): Flow<TranscriptDocument?> = store.entries.map { entries ->
         entries[recordingId]?.takeIf { !it.hidden && it.status == RecordingStatus.AsrReady }?.let { entry ->
             TranscriptDocument(entry.id, entry.title, entry.createdAtEpochMs, entry.durationMs,
-                emptyList(), emptyList(), asrDraft = entry.processingState?.asrDraft ?: emptyList())
+                emptyList(), emptyList(), asrDraft = entry.processingState?.asrDraft ?: emptyList(),
+                asrDraftSpeakers = entry.processingState?.speakerDraft?.map { it.speakerId })
         }
     }
 
