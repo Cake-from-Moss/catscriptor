@@ -4,7 +4,7 @@ import androidx.compose.runtime.saveable.Saver
 
 enum class TopTab { HOME, RECORDINGS }
 
-/** Дочерние экраны поверх вкладок; на них нет нижней навигации (§1). */
+/** Дочерние экраны поверх вкладок; на них нет нижней навигации. */
 sealed interface ChildScreen {
     data class Transcript(val recordingId: String) : ChildScreen
     data object Settings : ChildScreen

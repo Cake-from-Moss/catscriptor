@@ -19,6 +19,6 @@ interface AppGraph {
     val export: ExportGateway
     val settings: SettingsRepository
 
-    /** Динамический цвет Android 12+ (§2). Демо-сборка выключает его, чтобы совпасть с макетом. */
+    /** Динамический цвет Android 12+. Демо-сборка выключает его, чтобы совпасть с макетом. */
     val useDynamicColor: Boolean get() = true
 }

@@ -35,7 +35,7 @@ import org.cfm.catscriptor.R
 import org.cfm.catscriptor.ui.components.AppIcons
 import org.cfm.catscriptor.ui.theme.StenografDimens
 
-/** Плавающая навигация из §5.1: высота 72, радиус 36, индикатор 56 × 32, бейдж 8 dp. */
+/** Плавающая навигация: высота 72, радиус 36, индикатор 56 × 32, бейдж 8 dp. */
 @Composable
 fun FloatingBottomBar(
     selected: TopTab,

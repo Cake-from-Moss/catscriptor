@@ -8,7 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * Общий Snackbar над плавающей навигацией (§6.8). Новое сообщение заменяет текущее,
+ * Общий Snackbar над плавающей навигацией. Новое сообщение заменяет текущее,
  * иначе Snackbar встают в очередь и таймаут «Удалено · Отменить» теряет смысл.
  */
 class AppSnackbar(val hostState: SnackbarHostState, private val scope: CoroutineScope) {

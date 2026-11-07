@@ -6,7 +6,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 
-/** Запасная палитра из DESIGN.md §2: Android ниже 12 и демо-сборка. */
+/** Запасная палитра дизайна: Android ниже 12 и демо-сборка. */
 val StenografLightColors: ColorScheme = lightColorScheme(
     primary = Color(0xFF6750A4),
     onPrimary = Color(0xFFFFFFFF),
@@ -57,7 +57,7 @@ private val LightSpeakers = listOf(
     SpeakerColors(Color(0xFFEADDFF), Color(0xFF21005D), Color(0xFF6750A4)),
     SpeakerColors(Color(0xFFFFD8E4), Color(0xFF31111D), Color(0xFFB0546F)),
     SpeakerColors(Color(0xFFC8E6FF), Color(0xFF001E30), Color(0xFF00658F)),
-    // §2 разрешает для 4-го и 5-го спикера оранжевый и зелёный тональные контейнеры.
+    // Для 4-го и 5-го спикера дизайн задаёт оранжевый и зелёный тональные контейнеры.
     SpeakerColors(Color(0xFFFFDBC8), Color(0xFF341100), Color(0xFF9A4A1C)),
     SpeakerColors(Color(0xFFC4EED0), Color(0xFF00210F), Color(0xFF2E6B47)),
 )

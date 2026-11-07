@@ -8,10 +8,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
-/** Табличные цифры, чтобы таймер и проценты не «дрожали» при смене значений (§3). */
+/** Табличные цифры, чтобы таймер и проценты не «дрожали» при смене значений. */
 private const val TABULAR = "tnum"
 
-/** Стили из таблицы §3, у которых нет прямого соответствия в типографике M3. */
+/** Стили из таблицы типографики, у которых нет прямого соответствия в типографике M3. */
 @Immutable
 object StenografType {
     val screenTitle = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Normal)

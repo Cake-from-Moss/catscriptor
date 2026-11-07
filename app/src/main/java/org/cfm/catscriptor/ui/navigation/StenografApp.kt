@@ -119,7 +119,7 @@ fun StenografApp(graph: AppGraph) {
                 }
             }
 
-            // Snackbar поднимается над навигацией и не перекрывает её (§6.8).
+            // Snackbar поднимается над навигацией и не перекрывает её.
             SnackbarHost(
                 hostState,
                 modifier = Modifier

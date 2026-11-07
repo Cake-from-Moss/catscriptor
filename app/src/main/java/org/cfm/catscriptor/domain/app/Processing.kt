@@ -3,7 +3,7 @@ package org.cfm.catscriptor.domain.app
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
-/** Порядок совпадает с конвейером из AGENTS.md и DESIGN.md §5.3. */
+/** Порядок совпадает с конвейером из AGENTS.md. */
 enum class ProcessingStage { PREPARE_AUDIO, DETECT_SPEECH, TRANSCRIBE, DIARIZE, CORRECT_TEXT }
 
 sealed interface StageStatus {
@@ -37,7 +37,7 @@ data class ProcessingJob(
 sealed interface ModelsStatus {
     data object Ready : ModelsStatus
 
-    /** Модели отсутствуют или повреждены: запись разрешена, обработка нет (§7). */
+    /** Модели отсутствуют или повреждены: запись разрешена, обработка нет. */
     data class Unavailable(val details: String?) : ModelsStatus
 }
 
@@ -59,6 +59,6 @@ interface ProcessingController {
     suspend fun cancel(recordingId: String)
     suspend fun retry(recordingId: String)
 
-    /** «Сохранить без этого этапа», например без пунктуации (§7). */
+    /** «Сохранить без этого этапа», например без пунктуации. */
     suspend fun skipStage(recordingId: String, stage: ProcessingStage)
 }

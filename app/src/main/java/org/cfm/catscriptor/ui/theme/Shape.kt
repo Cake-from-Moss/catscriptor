@@ -3,7 +3,7 @@ package org.cfm.catscriptor.ui.theme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
-/** Формы из §4. Всё нажимаемое — пилюля или круг; эти радиусы только для контейнеров. */
+/** Формы дизайна. Всё нажимаемое — пилюля или круг; эти радиусы только для контейнеров. */
 object StenografShapes {
     val Card = RoundedCornerShape(28.dp)
     val TopSheet = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
@@ -13,7 +13,7 @@ object StenografShapes {
     val RecordPill = RoundedCornerShape(44.dp)
 }
 
-/** Отступы из §4 и размеры плавающей навигации из §5.1. */
+/** Отступы и размеры плавающей навигации. */
 object StenografDimens {
     val ScreenPadding = 16.dp
     val GroupGap = 24.dp

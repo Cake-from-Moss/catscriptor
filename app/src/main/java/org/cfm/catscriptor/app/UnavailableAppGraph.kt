@@ -29,7 +29,7 @@ import org.cfm.catscriptor.domain.app.TranscriptDocument
 
 /**
  * Честное состояние основной сборки, пока пайплайн (#3–#8) не реализован: записей нет,
- * модели недоступны. Здесь нет выдуманных данных; экран показывает состояния ошибок из §7.
+ * модели недоступны. Здесь нет выдуманных данных; экран показывает состояния ошибок.
  */
 class UnavailableAppGraph : AppGraph {
     override val recordings: RecordingRepository = EmptyRecordingRepository

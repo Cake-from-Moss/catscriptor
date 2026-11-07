@@ -6,8 +6,8 @@ import org.cfm.catscriptor.domain.app.RecordingSummary
 import org.cfm.catscriptor.domain.app.TranscriptDocument
 
 /**
- * Общее состояние демо-сборки: что показывает библиотека. Данные повторяют кадры из
- * design-screens.pdf (см. DemoSeed). Изменения видны всем демо-контроллерам сразу.
+ * Общее состояние демо-сборки: что показывает библиотека. Данные повторяют кадры макета
+ * (см. DemoSeed). Изменения видны всем демо-контроллерам сразу.
  */
 class DemoStore {
     val summaries = MutableStateFlow<List<RecordingSummary>>(emptyList())

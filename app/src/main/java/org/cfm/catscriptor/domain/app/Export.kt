@@ -3,7 +3,7 @@ package org.cfm.catscriptor.domain.app
 enum class ExportFormat { TXT, JSON, SRT }
 
 /**
- * [useSpeakerNames] влияет только на TXT и SRT: в JSON всегда speaker_N (AGENTS.md, §5.6).
+ * [useSpeakerNames] влияет только на TXT и SRT: в JSON всегда speaker_N (AGENTS.md).
  * [includeAudio] — опция из макета, которой нет в спецификации; см. docs/ui-integration.md.
  */
 data class ExportOptions(

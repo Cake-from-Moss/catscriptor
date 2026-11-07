@@ -8,7 +8,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 
-/** Кривые и длительности M3 из §6. */
+/** Кривые и длительности M3. */
 object StenografMotion {
     val Emphasized: Easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
     const val TAB_FADE_THROUGH_MS = 300
@@ -17,7 +17,7 @@ object StenografMotion {
     const val FADE_IN_MS = 200
 }
 
-/** true, если в системе отключены анимации (§8): вращение и «дыхание» выключаются. */
+/** true, если в системе отключены анимации: вращение и «дыхание» выключаются. */
 val LocalReduceMotion = compositionLocalOf { false }
 
 @Composable

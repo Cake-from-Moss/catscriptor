@@ -10,7 +10,7 @@ import org.cfm.catscriptor.domain.app.RecorderController
 import org.cfm.catscriptor.domain.app.RecordingRepository
 import org.cfm.catscriptor.domain.app.SettingsRepository
 
-/** Сценарии для проверки состояний из §5 и §7; выбираются через DemoControlActivity. */
+/** Сценарии для проверки состояний экранов и ошибок; выбираются через DemoControlActivity. */
 enum class DemoScenario { DEFAULT, EMPTY, PROCESSING_ERROR, MODELS_MISSING, LOW_STORAGE }
 
 class DemoAppGraph(context: Context) : AppGraph {
