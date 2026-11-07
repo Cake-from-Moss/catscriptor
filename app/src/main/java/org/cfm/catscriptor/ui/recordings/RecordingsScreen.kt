@@ -254,7 +254,7 @@ private fun RecordingRow(
     modifier: Modifier = Modifier,
 ) {
     val processing = summary.status as? RecordingStatus.Processing
-    val highlighted = summary.status != RecordingStatus.Ready && summary.status !is RecordingStatus.Failed
+    val highlighted = summary.status != RecordingStatus.Ready && summary.status != RecordingStatus.AsrReady && summary.status !is RecordingStatus.Failed
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -337,6 +337,7 @@ private fun metaLine(summary: RecordingSummary): String = when (val status = sum
     )
     RecordingStatus.Queued -> stringResource(R.string.recordings_queued_meta)
     is RecordingStatus.Failed -> stringResource(R.string.recordings_failed_meta, stageLabel(status.stage))
+    RecordingStatus.AsrReady -> stringResource(R.string.recordings_asr_ready_meta, formatTimecode(summary.durationMs))
     RecordingStatus.Ready -> {
         val duration = formatTimecode(summary.durationMs)
         summary.speakerCount?.let { stringResource(R.string.meta_separator, duration, speakersCountLabel(it)) }

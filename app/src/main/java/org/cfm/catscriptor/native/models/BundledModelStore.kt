@@ -14,7 +14,7 @@ class ModelPreparationException(message: String, cause: Throwable? = null) :
 
 data class ModelFileSpec(val name: String, val size: Long, val sha256: String)
 
-/** Манифест относится только к проверенному комплекту GigaAM v3 CTC. */
+/** Манифест проверенного комплекта; набор обязательных файлов задаётся типом модели. */
 data class BundledModelSpec(
     val id: String,
     val assetDirectory: String,
@@ -22,6 +22,14 @@ data class BundledModelSpec(
 ) {
     companion object {
         fun read(input: InputStream): BundledModelSpec {
+            return readFiles(input, setOf("model.int8.onnx", "tokens.txt", "LICENSE"))
+        }
+
+        fun readVad(input: InputStream): BundledModelSpec {
+            return readFiles(input, setOf("silero_vad.onnx", "LICENSE"))
+        }
+
+        private fun readFiles(input: InputStream, requiredFiles: Set<String>): BundledModelSpec {
             val properties = Properties().apply { load(input) }
             fun value(key: String) = requireNotNull(properties.getProperty(key)) {
                 "В манифесте модели отсутствует $key"
@@ -44,10 +52,10 @@ data class BundledModelSpec(
                         value("$name.sha256").also { require(it.matches(Regex("[0-9a-f]{64}"))) },
                     )
                 }.also { files ->
-                    require(files.map { it.name }.toSet() == setOf("model.int8.onnx", "tokens.txt", "LICENSE")) {
-                        "Несовместимый комплект GigaAM CTC"
+                    require(files.map { it.name }.toSet() == requiredFiles) {
+                        "Несовместимый комплект модели"
                     }
-                    require(files.size == 3)
+                    require(files.size == requiredFiles.size)
                 },
             )
         }

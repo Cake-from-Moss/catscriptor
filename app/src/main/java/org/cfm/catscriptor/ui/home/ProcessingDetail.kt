@@ -70,6 +70,7 @@ internal fun ProcessingDetail(
     onCollapse: () -> Unit,
     onRetry: () -> Unit,
     onSkipStage: (ProcessingStage) -> Unit,
+    onOpenResult: () -> Unit,
 ) {
     LazyColumn(contentPadding = contentPadding, modifier = Modifier.fillMaxWidth()) {
         item(key = "card") {
@@ -79,6 +80,7 @@ internal fun ProcessingDetail(
                 onCollapse = onCollapse,
                 onRetry = onRetry,
                 onSkipStage = onSkipStage,
+                onOpenResult = onOpenResult,
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
@@ -107,6 +109,7 @@ private fun ProcessingCard(
     onCollapse: () -> Unit,
     onRetry: () -> Unit,
     onSkipStage: (ProcessingStage) -> Unit,
+    onOpenResult: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -152,6 +155,11 @@ private fun ProcessingCard(
                     }
                     FilledTonalButton(onClick = onRetry) {
                         Text(stringResource(R.string.home_retry), style = StenografType.label)
+                    }
+                }
+                if (job.stages.any { it.stage == ProcessingStage.TRANSCRIBE && it.status is StageStatus.Done }) {
+                    FilledTonalButton(onClick = onOpenResult) {
+                        Text(stringResource(R.string.home_open_asr_draft), style = StenografType.label)
                     }
                 }
                 TextButton(onClick = onCancel) {

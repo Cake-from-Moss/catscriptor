@@ -83,7 +83,13 @@ def main():
         if hashlib.sha256(data).hexdigest() != model["test.wav.sha256"]:
             raise ValueError("Повреждён тестовый WAV")
         sample.write_bytes(data)
-    print("AAR и обязательная ASR-модель подготовлены и проверены.")
+    vad = properties(ROOT / "app/src/main/assets/vad-manifest.properties")
+    for name in vad["files"].split(","):
+        target = ROOT / "app/src/main/assets" / vad["model.directory"] / name
+        download(vad[f"{name}.url"], vad[f"{name}.sha256"], target)
+        if target.stat().st_size != int(vad[f"{name}.size"]):
+            raise ValueError(f"Неверный размер VAD-файла: {name}")
+    print("AAR, ASR и VAD подготовлены и проверены.")
 
 
 if __name__ == "__main__":

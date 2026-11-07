@@ -4,8 +4,6 @@ import com.google.gson.JsonParser
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.runBlocking
 import org.cfm.catscriptor.domain.pipeline.DefaultTranscriptExporter
-import org.cfm.catscriptor.domain.pipeline.TimeRange
-import org.cfm.catscriptor.domain.pipeline.TimedWord
 import org.cfm.catscriptor.domain.pipeline.Transcript
 import org.cfm.catscriptor.domain.pipeline.TranscriptFormat
 import org.cfm.catscriptor.domain.pipeline.Utterance
@@ -15,7 +13,7 @@ import org.junit.Test
 
 class TranscriptMappingTest {
     private fun utterance(speaker: String, start: Long, end: Long, text: String) =
-        Utterance(speaker, start, end, text, listOf(TimedWord("слово", TimeRange(start, end))))
+        Utterance(speaker, start, end, text)
 
     private val transcript = Transcript(
         listOf(
@@ -63,6 +61,17 @@ class TranscriptMappingTest {
         assertEquals(1f, moved.speakers[0].shareFraction, 1e-6f)
         assertEquals(0f, moved.speakers[1].shareFraction, 0f)
         assertEquals("Анна", moved.speakers[0].displayName)
+    }
+
+    @Test
+    fun roundTripPreservesTextAndAbsoluteLongIntervals() {
+        val start = Int.MAX_VALUE.toLong() + 1000
+        val original = Transcript(listOf(
+            utterance("speaker_1", start, start + 500, ""),
+            utterance("speaker_2", start + 500, start + 1000, "  Кот\nмяу!  "),
+        ))
+        val document = original.toDocument(metadata)
+        assertEquals(original, document.toPipelineTranscript())
     }
 
     @Test

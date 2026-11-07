@@ -6,7 +6,7 @@ import org.junit.Test
 
 class TranscriptTest {
     private fun utterance(start: Long = 1250, end: Long = 2000) = Utterance(
-        "speaker_1", start, end, "Привет!", listOf(TimedWord("привет", TimeRange(start, end))),
+        "speaker_1", start, end, "Привет!",
     )
 
     @Test
@@ -15,27 +15,27 @@ class TranscriptTest {
     }
 
     @Test
-    fun correctionPreservesSourceWordsSpeakerAndAbsoluteTimes() {
+    fun correctionPreservesSpeakerAndAbsoluteTimesWithoutWords() {
         val original = utterance()
         val corrected = original.copy(text = "Добрый день!")
-        assertEquals(original.words, corrected.words)
         assertEquals(original.speakerId, corrected.speakerId)
         assertEquals(1250L, corrected.startMs)
         assertEquals(2000L, corrected.endMs)
-        assertEquals("привет", corrected.words.single().text)
+        assertEquals("Добрый день!", corrected.text)
     }
 
     @Test
     fun invalidIntervalsAreRejected() {
         listOf(-1L to 10L, 10L to 10L, 20L to 10L).forEach { (start, end) ->
             assertThrows(IllegalArgumentException::class.java) { TimeRange(start, end) }
+            assertThrows(IllegalArgumentException::class.java) { utterance(start, end) }
         }
     }
 
     @Test
     fun largeRecordingOffsetsRemainLongIntegers() {
         val start = Int.MAX_VALUE.toLong() + 1000
-        assertEquals(start, utterance(start, start + 500).words.single().time.startMs)
+        assertEquals(start, utterance(start, start + 500).startMs)
     }
 
     @Test
@@ -57,28 +57,19 @@ class TranscriptTest {
     }
 
     @Test
-    fun missingUnsortedAndOutOfBoundsWordsAreRejected() {
-        val first = TimedWord("раз", TimeRange(1250, 1500))
-        val second = TimedWord("два", TimeRange(1600, 2000))
-        val outside = TimedWord("три", TimeRange(1900, 2100))
-        assertThrows(IllegalArgumentException::class.java) { utterance().copy(words = emptyList()) }
-        assertThrows(IllegalArgumentException::class.java) {
-            utterance().copy(words = listOf(second, first))
-        }
-        assertThrows(IllegalArgumentException::class.java) {
-            utterance().copy(words = listOf(outside))
-        }
-        assertThrows(IllegalArgumentException::class.java) {
-            AsrSegment(TimeRange(1250, 2000), listOf(second, first))
-        }
-        assertThrows(IllegalArgumentException::class.java) {
-            AsrSegment(TimeRange(1250, 2000), listOf(outside))
-        }
-        assertThrows(IllegalArgumentException::class.java) { TimedWord(" ", TimeRange(0, 1)) }
+    fun recognizedFragmentRetainsTextAndAbsoluteIntervalWithoutWords() {
+        val range = TimeRange(10_000, 12_000)
+        val recognized = AsrSegment(range, "Привет, кот!")
+        assertEquals(range, recognized.time)
+        assertEquals("Привет, кот!", recognized.text)
     }
 
     @Test
-    fun silenceHasNoRecognizedWords() {
-        assertEquals(emptyList<TimedWord>(), AsrSegment(TimeRange(0, 1000), emptyList()).words)
+    fun silenceAllowsEmptyOrBlankText() {
+        listOf("", " ").forEach { text ->
+            val range = TimeRange(10_000, 11_000)
+            assertEquals(text, AsrSegment(range, text).text)
+            assertEquals(range, AsrSegment(range, text).time)
+        }
     }
 }

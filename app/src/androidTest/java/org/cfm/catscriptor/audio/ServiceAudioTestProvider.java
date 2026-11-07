@@ -23,6 +23,14 @@ public final class ServiceAudioTestProvider extends ContentProvider {
                         out.write(new byte[] {1, 2, 3});
                         return;
                     }
+                    if ("speech".equals(uri.getLastPathSegment())) {
+                        try (java.io.InputStream input = getContext().getAssets().open("sherpa-example.wav")) {
+                            byte[] buffer = new byte[8192];
+                            int count;
+                            while ((count = input.read(buffer)) != -1) out.write(buffer, 0, count);
+                        }
+                        return;
+                    }
                     int samples = "long".equals(uri.getLastPathSegment()) ? 16000000 : 1600000;
                     ByteBuffer header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN);
                     header.put("RIFF".getBytes("US-ASCII")).putInt(36 + samples * 2);
