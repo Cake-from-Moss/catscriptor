@@ -2,6 +2,7 @@ package org.cfm.catscriptor.export;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
+import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
@@ -10,8 +11,10 @@ import java.io.File;
 import java.io.FileNotFoundException;
 
 /**
- * Настоящий файловый провайдер тестового APK; внешнее окно SAF не требуется.
- * Java не требует Kotlin runtime в отдельном процессе APK тестов.
+ * Настоящий файловый провайдер только тестового APK; внешнее окно SAF не требуется.
+ * Android запускает его в отдельном процессе без classpath основного APK.
+ * Поэтому реализация зависит только от платформы, а не от Kotlin stdlib,
+ * которую сборщик тестового APK исключает как зависимость приложения.
  */
 public final class ExportTestProvider extends ContentProvider {
     @Override
@@ -29,9 +32,14 @@ public final class ExportTestProvider extends ContentProvider {
         if ("denied".equals(uri.getLastPathSegment())) {
             throw new SecurityException("Тестовый запрет");
         }
+        Context context = getContext();
+        if (context == null) {
+            throw new IllegalStateException("Тестовый провайдер не присоединён к контексту");
+        }
         return ParcelFileDescriptor.open(
-                new File(getContext().getCacheDir(), "saf-export-test"),
-                ParcelFileDescriptor.parseMode(mode));
+                new File(context.getCacheDir(), "saf-export-test"),
+                ParcelFileDescriptor.parseMode(mode)
+        );
     }
 
     @Override

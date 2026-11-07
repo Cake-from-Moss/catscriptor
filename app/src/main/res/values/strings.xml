@@ -1,3 +1,5 @@
 <resources>
-    <string name="app_name">catscriptor</string>
+    <string name="app_name">Стенограф</string>
+    <string name="nav_record">Запись</string>
+    <string name="nav_recordings">Записи</string>
 </resources>
