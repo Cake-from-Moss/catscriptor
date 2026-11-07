@@ -111,8 +111,13 @@ class DemoProcessingController(private val store: DemoStore) : ProcessingControl
         publish()
     }
 
+    /**
+     * Сброс библиотеки идёт в том же последовательном потоке, что и сценарий: иначе отложенный
+     * запуск сценария по умолчанию из init мог вернуть «Планёрку» уже после сброса.
+     */
     fun applyScenario(scenario: DemoScenario) {
         scope.launch {
+            store.reset(scenario)
             queue.clear()
             models.value = if (scenario == DemoScenario.MODELS_MISSING) {
                 ModelsStatus.Unavailable(MODELS_MISSING_DETAILS)

@@ -274,7 +274,8 @@ private fun HypothesisText(text: String, color: Color) {
     Text(
         buildAnnotatedString {
             append(text)
-            appendInlineContent(CURSOR_ID, "")
+            // Compose запрещает пустой alternateText; пробел TalkBack не зачитывает.
+            appendInlineContent(CURSOR_ID, " ")
         },
         style = StenografType.body,
         color = color,

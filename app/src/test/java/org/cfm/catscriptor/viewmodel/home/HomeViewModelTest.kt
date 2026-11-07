@@ -51,6 +51,13 @@ class BuildHomeUiStateTest {
     }
 
     @Test
+    fun `only unfinished recordings without jobs still show the empty state`() {
+        val summaries = listOf(summary("f", status = RecordingStatus.Failed(ProcessingStage.DIARIZE)))
+        val content = build(summaries = summaries).content as HomeContent.Overview
+        assertTrue(content.showEmptyState)
+    }
+
+    @Test
     fun `recents are the three newest ready recordings`() {
         val summaries = listOf(
             summary("a", createdAt = 1),

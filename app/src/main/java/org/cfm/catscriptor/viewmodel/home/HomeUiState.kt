@@ -94,7 +94,9 @@ fun buildHomeUiState(
             HomeContent.Overview(
                 jobs = jobs,
                 recents = recents,
-                showEmptyState = summaries.isEmpty() && jobs.isEmpty(),
+                // Если в библиотеке только записи без задачи (например, с ошибкой), показывать нечего:
+                // без пустого состояния экран под «пилюлей» остался бы совсем пустым.
+                showEmptyState = recents.isEmpty() && jobs.isEmpty(),
                 showModelsIssue = modelsIssue != null,
             )
         }

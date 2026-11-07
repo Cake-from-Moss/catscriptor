@@ -7,7 +7,8 @@ import org.cfm.catscriptor.MainActivity
 
 /**
  * Запуск экрана в заданном сценарии для проверки состояний:
- * adb shell am start -n org.cfm.catscriptor.demo/org.cfm.catscriptor.demo.DemoControlActivity -e scenario empty
+ * adb shell am start -S -n org.cfm.catscriptor.demo/org.cfm.catscriptor.demo.DemoControlActivity -e scenario empty
+ * Флаг -S обязателен: без перезапуска Android вернёт уже открытую задачу и сценарий не применится.
  */
 class DemoControlActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {

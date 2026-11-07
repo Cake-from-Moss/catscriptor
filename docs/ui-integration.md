@@ -18,7 +18,8 @@ ui/*Screen (без состояния) ← ui/*Route ← viewmodel/* ← domain/
 
 ```bash
 ./gradlew assembleDemo   # app/build/outputs/apk/demo/app-demo.apk, пакет org.cfm.catscriptor.demo
-adb shell am start -n org.cfm.catscriptor.demo/org.cfm.catscriptor.demo.DemoControlActivity -e scenario empty
+# -S перезапускает приложение: без него Android вернёт уже открытую задачу и сценарий не применится
+adb shell am start -S -n org.cfm.catscriptor.demo/org.cfm.catscriptor.demo.DemoControlActivity -e scenario empty
 ```
 
 Сценарии: `default`, `empty`, `processing_error`, `models_missing`, `low_storage`.

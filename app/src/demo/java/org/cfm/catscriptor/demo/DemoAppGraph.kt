@@ -28,7 +28,6 @@ class DemoAppGraph(context: Context) : AppGraph {
     override val useDynamicColor: Boolean = false
 
     fun applyScenario(scenario: DemoScenario) {
-        store.reset(scenario)
         demoProcessing.applyScenario(scenario)
         demoRecorder.applyScenario(scenario)
     }
