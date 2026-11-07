@@ -87,8 +87,11 @@ class TranscriptViewModel(
     /** Экран стал видимым: плеер загружает аудио этой записи. */
     fun onEnter() = playback.load(recordingId)
 
-    /** ViewModel живёт дольше экрана (хранилище Activity), поэтому плеер освобождается здесь. */
-    fun onLeave() = playback.release(recordingId)
+    /**
+     * Плеер освобождается вместе с ViewModel: её хранилище (ScopedViewModels) очищается, когда экран
+     * закрыт по-настоящему, но переживает поворот — воспроизведение и позиция при повороте сохраняются.
+     */
+    override fun onCleared() = playback.release(recordingId)
 
     private val lines: List<TranscriptLine> get() = state.value.document?.lines.orEmpty()
     private val player: PlaybackState get() = state.value.playback

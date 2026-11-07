@@ -81,8 +81,17 @@ internal class DiarizedDraftRunner(
                 val transcript = merger.merge(recognized, turns)
                 finish(ProcessingStage.TRANSCRIBE)
 
+                // Реплики со спикерами публикуются до LLM: если коррекция упадёт, пользователь может
+                // сохранить запись без неё («Пропустить этап»), не повторяя VAD, диаризацию и ASR.
+                state = state.copy(
+                    asrDraft = transcript.transcript.map { AsrSegment(TimeRange(it.startMs, it.endMs), it.text) },
+                    speakerDraft = transcript.transcript,
+                )
+
                 // Финал: локальная LLM правит только текст, спикеров и таймкоды не трогает (#7).
-                emit(ProcessingStage.CORRECT_TEXT)
+                // processedMs = 0, как у ASR: иначе прогресс этапа считался бы половиной веса,
+                // а после первой реплики откатывался назад.
+                emit(ProcessingStage.CORRECT_TEXT, 0)
                 val corrected = ArrayList<Utterance>(transcript.transcript.size)
                 if (transcript.transcript.isNotEmpty()) {
                     correctorFactory().use { corrector ->
@@ -100,8 +109,6 @@ internal class DiarizedDraftRunner(
 
                 state = state.copy(
                     phase = AudioProcessingPhase.COMPLETED,
-                    asrDraft = transcript.transcript.map { AsrSegment(TimeRange(it.startMs, it.endMs), it.text) },
-                    speakerDraft = transcript.transcript,
                     transcript = corrected,
                     stages = snapshot(),
                 )

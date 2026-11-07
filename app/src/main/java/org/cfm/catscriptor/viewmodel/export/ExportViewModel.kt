@@ -34,7 +34,12 @@ data class ExportUiState(
     /** null, пока предпросмотр строится. */
     val preview: String? = null,
     val busy: Boolean = false,
+    /** false для ASR-черновика: экспортируется только финальная расшифровка. */
+    val exportable: Boolean = false,
 ) {
+    /** Кнопки «Поделиться» и «Сохранить» активны только для готовой расшифровки. */
+    val actionsEnabled: Boolean get() = exportable && !busy && preview != null
+
     /** В JSON speaker_id всегда speaker_N, поэтому переключатель имён там ничего не меняет. */
     val speakerNamesApplicable: Boolean get() = options.format != ExportFormat.JSON
 }
@@ -47,12 +52,7 @@ sealed interface ExportEvent {
     data object ShareFailed : ExportEvent
 }
 
-fun mimeTypeOf(format: ExportFormat): String = when (format) {
-    ExportFormat.TXT -> "text/plain"
-    ExportFormat.JSON -> "application/json"
-    // У SRT нет MIME-типа в IANA; application/x-subrip понимают плееры и файловые менеджеры.
-    ExportFormat.SRT -> "application/x-subrip"
-}
+fun mimeTypeOf(format: ExportFormat): String = format.mimeType
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExportViewModel(
@@ -101,6 +101,7 @@ class ExportViewModel(
             options = opts,
             preview = text,
             busy = isBusy,
+            exportable = doc != null && doc.asrDraft == null,
         )
 
     fun onFormatChange(format: ExportFormat) = options.update { it.copy(format = format) }
@@ -109,10 +110,11 @@ class ExportViewModel(
 
     fun onIncludeAudioChange(enabled: Boolean) = options.update { it.copy(includeAudio = enabled) }
 
-    fun suggestedFileName(): String =
-        gateway.suggestedFileName(document.value?.title.orEmpty(), options.value.format)
+    fun suggestedFileName(): String = saveTarget().fileName
 
-    fun mimeType(): String = mimeTypeOf(options.value.format)
+    fun mimeType(): String = saveTarget().mimeType
+
+    private fun saveTarget() = gateway.saveTarget(document.value?.title.orEmpty(), options.value)
 
     fun onShare() = runExclusive {
         val opts = options.value
@@ -137,7 +139,7 @@ class ExportViewModel(
                 try {
                     check(document.value?.asrDraft == null && document.value != null)
                     val name = gateway.saveTo(documentUri, recordingId, opts)
-                    ExportEvent.Saved(name, documentUri, mimeTypeOf(opts.format))
+                    ExportEvent.Saved(name, documentUri, gateway.saveTarget(document.value?.title.orEmpty(), opts).mimeType)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {

@@ -18,7 +18,4 @@ interface AppGraph {
     val playback: PlaybackController
     val export: ExportGateway
     val settings: SettingsRepository
-
-    /** Динамический цвет Android 12+. Демо-сборка выключает его, чтобы совпасть с макетом. */
-    val useDynamicColor: Boolean get() = true
 }

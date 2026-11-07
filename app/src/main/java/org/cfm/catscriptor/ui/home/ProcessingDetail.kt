@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import org.cfm.catscriptor.R
 import org.cfm.catscriptor.domain.app.ProcessingJob
 import org.cfm.catscriptor.domain.app.ProcessingStage
+import org.cfm.catscriptor.domain.app.isOptional
 import org.cfm.catscriptor.domain.app.RecordingSource
 import org.cfm.catscriptor.domain.app.StageProgress
 import org.cfm.catscriptor.domain.app.StageStatus
@@ -150,8 +151,11 @@ private fun ProcessingCard(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (failed != null) {
-                    TextButton(onClick = { onSkipStage(failed.stage) }) {
-                        Text(stringResource(R.string.home_skip_stage), style = StenografType.label)
+                    // Пропустить можно только необязательный этап (LLM-коррекцию), остальные нужны результату.
+                    if (failed.stage.isOptional) {
+                        TextButton(onClick = { onSkipStage(failed.stage) }) {
+                            Text(stringResource(R.string.home_skip_stage), style = StenografType.label)
+                        }
                     }
                     FilledTonalButton(onClick = onRetry) {
                         Text(stringResource(R.string.home_retry), style = StenografType.label)

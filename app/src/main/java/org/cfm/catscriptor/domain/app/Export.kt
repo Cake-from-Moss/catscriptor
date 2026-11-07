@@ -1,10 +1,22 @@
 package org.cfm.catscriptor.domain.app
 
-enum class ExportFormat { TXT, JSON, SRT }
+enum class ExportFormat(val extension: String, val mimeType: String) {
+    TXT("txt", "text/plain"),
+    JSON("json", "application/json"),
+    // У SRT нет MIME-типа в IANA; application/x-subrip понимают плееры и файловые менеджеры.
+    SRT("srt", "application/x-subrip"),
+}
+
+/** MIME-тип архива «расшифровка + аудио». */
+const val ZIP_MIME_TYPE = "application/zip"
+
+/** Файл, который создаст [ExportGateway.saveTo]: имя для CreateDocument и его MIME-тип. */
+data class SaveTarget(val fileName: String, val mimeType: String)
 
 /**
  * [useSpeakerNames] влияет только на TXT и SRT: в JSON всегда speaker_N (AGENTS.md).
- * [includeAudio] — опция из макета; что именно она сохраняет, ещё не решено (см. docs/ui-integration.md).
+ * [includeAudio]: «Сохранить» пишет ZIP с файлом расшифровки и исходным аудио,
+ * «Поделиться» отправляет оба файла одним ACTION_SEND_MULTIPLE.
  */
 data class ExportOptions(
     val format: ExportFormat,
@@ -24,6 +36,18 @@ interface ExportGateway {
     suspend fun prepareShare(recordingId: String, options: ExportOptions): SharePayload
 
     fun suggestedFileName(title: String, format: ExportFormat): String
+
+    /** Имя и тип документа для CreateDocument; без аудио — файл выбранного формата. */
+    fun saveTarget(title: String, options: ExportOptions): SaveTarget =
+        SaveTarget(suggestedFileName(title, options.format), options.format.mimeType)
 }
 
-data class SharePayload(val contentUri: String, val mimeType: String)
+/**
+ * [contentUri] — файл расшифровки; [extraContentUris] — дополнительные файлы (исходное аудио).
+ * При нескольких файлах [mimeType] общий для всех (wildcard «любой тип»).
+ */
+data class SharePayload(
+    val contentUri: String,
+    val mimeType: String,
+    val extraContentUris: List<String> = emptyList(),
+)
