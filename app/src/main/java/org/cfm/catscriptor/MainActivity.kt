@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val graph = (application as CatscriptorApp).graph
         setContent {
-            StenografTheme(dynamicColor = graph.useDynamicColor) {
+            StenografTheme {
                 StenografApp(graph)
             }
         }

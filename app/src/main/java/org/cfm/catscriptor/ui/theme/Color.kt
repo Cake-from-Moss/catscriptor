@@ -6,7 +6,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 
-/** Запасная палитра дизайна: Android ниже 12 и демо-сборка. */
+/** Запасная палитра дизайна: Android ниже 12 или выключенный динамический цвет. */
 val StenografLightColors: ColorScheme = lightColorScheme(
     primary = Color(0xFF6750A4),
     onPrimary = Color(0xFFFFFFFF),

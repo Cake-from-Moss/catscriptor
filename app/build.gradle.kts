@@ -112,13 +112,6 @@ android {
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }
         }
-        // Показ интерфейса без бэкенда. Демо-данные лежат только в src/demo, поэтому в debug и
-        // release (а значит, и в APK для проверки) их нет: см. запрет моков в AGENTS.md.
-        create("demo") {
-            initWith(getByName("debug"))
-            applicationIdSuffix = ".demo"
-            matchingFallbacks += "debug"
-        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -152,7 +145,6 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
-    "demoImplementation"(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.espresso.core)
