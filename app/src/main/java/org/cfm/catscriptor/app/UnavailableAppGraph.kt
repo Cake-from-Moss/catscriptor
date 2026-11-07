@@ -83,7 +83,7 @@ internal class UnavailableRecorderController : RecorderController {
     override fun addMark() = Unit
 }
 
-/** internal: переиспользуется ProductionAppGraph до реализации #20. */
+/** Плеер графа без бэкенда (UnavailableAppGraph). */
 internal class UnavailablePlaybackController : PlaybackController {
     override val state: StateFlow<PlaybackState> = MutableStateFlow(PlaybackState())
     override fun load(recordingId: String) = Unit
@@ -94,7 +94,7 @@ internal class UnavailablePlaybackController : PlaybackController {
     override fun release(recordingId: String) = Unit
 }
 
-/** Без расшифровок экспортировать нечего; отдаётся ProductionAppGraph до появления транскриптов. */
+/** Без расшифровок экспортировать нечего (UnavailableAppGraph). */
 internal object UnavailableExportGateway : ExportGateway {
     override suspend fun preview(recordingId: String, options: ExportOptions): String = ""
     override suspend fun saveTo(documentUri: String, recordingId: String, options: ExportOptions): String =

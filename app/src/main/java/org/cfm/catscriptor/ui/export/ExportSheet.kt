@@ -1,6 +1,7 @@
 package org.cfm.catscriptor.ui.export
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import androidx.core.net.toUri
@@ -62,6 +63,7 @@ import kotlinx.coroutines.launch
 import org.cfm.catscriptor.R
 import org.cfm.catscriptor.app.AppGraph
 import org.cfm.catscriptor.domain.app.ExportFormat
+import org.cfm.catscriptor.domain.app.SharePayload
 import org.cfm.catscriptor.domain.app.TranscriptRendering
 import org.cfm.catscriptor.ui.components.AppIcons
 import org.cfm.catscriptor.ui.components.formatTimecode
@@ -114,7 +116,7 @@ fun ExportSheetRoute(graph: AppGraph, recordingId: String, onDismiss: () -> Unit
     LaunchedEffect(viewModel) {
         viewModel.eventFlow.collect { event ->
             when (event) {
-                is ExportEvent.Share -> context.startShare(event.payload.contentUri, event.payload.mimeType, texts, snackbar)
+                is ExportEvent.Share -> context.startShare(event.payload, texts, snackbar)
                 is ExportEvent.Saved -> {
                     snackbar.show(
                         message = texts.savedTemplate.format(event.displayName),
@@ -161,11 +163,18 @@ private class ExportTexts(
     val chooser: String,
 )
 
-private fun Context.startShare(contentUri: String, mimeType: String, texts: ExportTexts, snackbar: AppSnackbar) {
-    val send = Intent(Intent.ACTION_SEND)
-        .setType(mimeType)
-        .putExtra(Intent.EXTRA_STREAM, contentUri.toUri())
+private fun Context.startShare(payload: SharePayload, texts: ExportTexts, snackbar: AppSnackbar) {
+    val uris = (listOf(payload.contentUri) + payload.extraContentUris).map { it.toUri() }
+    // Расшифровка с аудио уходит одним ACTION_SEND_MULTIPLE; ClipData нужен, чтобы разрешение
+    // на чтение получили все URI, а не только первый.
+    val send = if (uris.size == 1) {
+        Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris[0])
+    } else {
+        Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+    }
+        .setType(payload.mimeType)
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    send.clipData = ClipData.newRawUri(null, uris[0]).apply { uris.drop(1).forEach { addItem(ClipData.Item(it)) } }
     try {
         startActivity(Intent.createChooser(send, texts.chooser))
     } catch (_: ActivityNotFoundException) {
@@ -238,7 +247,7 @@ fun ExportSheetContent(
         Row(horizontalArrangement = Arrangement.spacedBy(StenografDimens.InnerGap)) {
             OutlinedButton(
                 onClick = onShare,
-                enabled = !state.busy && state.preview != null,
+                enabled = state.actionsEnabled,
                 shape = CircleShape,
                 modifier = Modifier.weight(1f).height(48.dp),
             ) {
@@ -248,7 +257,7 @@ fun ExportSheetContent(
             }
             Button(
                 onClick = onSave,
-                enabled = !state.busy && state.preview != null,
+                enabled = state.actionsEnabled,
                 shape = CircleShape,
                 modifier = Modifier.weight(1f).height(48.dp),
             ) {
