@@ -77,8 +77,7 @@ class PipelineOrchestrator(
                         val text = asr.transcribe(audio, segment)
                         result += text
                         doneMs += segment.time.endMs - segment.time.startMs
-                        val words = text.words.joinToString(" ") { it.text }
-                        if (words.isNotEmpty()) partial = if (partial.isEmpty()) words else "$partial $words"
+                        if (text.text.isNotBlank()) partial = if (partial.isEmpty()) text.text else "$partial\n${text.text}"
                         report(doneMs.toFloat() / totalSpeechMs, processedMs = segment.time.endMs, partialText = partial)
                     }
                     result

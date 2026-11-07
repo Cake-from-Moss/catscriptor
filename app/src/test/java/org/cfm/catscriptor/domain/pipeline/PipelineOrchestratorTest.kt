@@ -16,7 +16,6 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class PipelineOrchestratorTest {
     private val range = TimeRange(1_000, 3_000)
-    private val word = TimedWord("привет", TimeRange(1_100, 1_500))
     private val events = mutableListOf<String>()
     private var loaded = 0
     private var maxLoaded = 0
@@ -53,7 +52,7 @@ class PipelineOrchestratorTest {
         private val handle = model("asr")
         override suspend fun transcribe(audio: PcmAudioSource, segment: SpeechSegment): AsrSegment {
             gate?.await()
-            return AsrSegment(segment.time, listOf(word))
+            return AsrSegment(segment.time, "привет")
         }
         override fun close() = handle.close()
     }
@@ -73,9 +72,7 @@ class PipelineOrchestratorTest {
 
     private val merger = object : UtteranceMerger {
         override suspend fun merge(asr: List<AsrSegment>, speakers: List<SpeakerSegment>) =
-            Transcript(asr.flatMap { it.words }.map {
-                Utterance("speaker_1", it.time.startMs, it.time.endMs, it.text, listOf(it))
-            })
+            Transcript(asr.map { Utterance("speaker_1", it.time.startMs, it.time.endMs, it.text) })
     }
 
     private fun orchestrator(
@@ -94,8 +91,8 @@ class PipelineOrchestratorTest {
         assertEquals(1, result.transcript.size)
         val utterance = result.transcript.single()
         assertEquals("Привет.", utterance.text)
-        assertEquals(1_100, utterance.startMs)
-        assertEquals(1_500, utterance.endMs)
+        assertEquals(1_000, utterance.startMs)
+        assertEquals(3_000, utterance.endMs)
         val progress = sut.progress.value
         assertTrue(progress.stages.all { it.status is StageStatus.Done })
         assertEquals(1f, progress.overallFraction, 0.001f)
