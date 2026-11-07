@@ -71,7 +71,8 @@ private class UnavailableProcessingController : ProcessingController {
     override suspend fun skipStage(recordingId: String, stage: ProcessingStage) = Unit
 }
 
-private class UnavailableRecorderController : RecorderController {
+/** internal: переиспользуются ProductionAppGraph до реализации #20/#21. */
+internal class UnavailableRecorderController : RecorderController {
     override val isAvailable = false
     override val state: StateFlow<RecorderState> = MutableStateFlow(RecorderState.Idle)
     override suspend fun start(liveText: Boolean) = StartRecordingResult.Unavailable
@@ -82,7 +83,8 @@ private class UnavailableRecorderController : RecorderController {
     override fun addMark() = Unit
 }
 
-private class UnavailablePlaybackController : PlaybackController {
+/** internal: переиспользуется ProductionAppGraph до реализации #20. */
+internal class UnavailablePlaybackController : PlaybackController {
     override val state: StateFlow<PlaybackState> = MutableStateFlow(PlaybackState())
     override fun load(recordingId: String) = Unit
     override fun play() = Unit
@@ -92,8 +94,8 @@ private class UnavailablePlaybackController : PlaybackController {
     override fun release(recordingId: String) = Unit
 }
 
-/** Без расшифровок экспортировать нечего; экран экспорта в этой сборке недостижим. */
-private object UnavailableExportGateway : ExportGateway {
+/** Без расшифровок экспортировать нечего; отдаётся ProductionAppGraph до появления транскриптов. */
+internal object UnavailableExportGateway : ExportGateway {
     override suspend fun preview(recordingId: String, options: ExportOptions): String = ""
     override suspend fun saveTo(documentUri: String, recordingId: String, options: ExportOptions): String =
         error("Экспорт недоступен: нет расшифровок")

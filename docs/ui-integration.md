@@ -11,7 +11,7 @@ ui/*Screen (без состояния) ← ui/*Route ← viewmodel/* ← domain/
 
 | Build type | Граф | Зачем |
 |---|---|---|
-| `debug`, `release` | `UnavailableAppGraph` | честное состояние, пока нет пайплайна: записей нет, модели недоступны |
+| `debug`, `release` | `ProductionAppGraph` | импорт и подготовка аудио (PREPARE_AUDIO) реальны через AudioProcessingService; запись с микрофона, плеер и экспорт пока недоступны |
 | `demo` | `DemoAppGraph` (`app/src/demo`) | показ и проверка дизайна на данных из макета |
 
 Демо-данные лежат только в `src/demo`. В `debug`, `release` и в APK для проверки их нет: это требование AGENTS.md (запрет моков в основном пути).
@@ -27,7 +27,7 @@ adb shell am start -S -n org.cfm.catscriptor.demo/org.cfm.catscriptor.demo.DemoC
 ## Как подключить реализацию
 
 1. Реализовать нужный интерфейс из `domain/app`.
-2. Подставить его в `UnavailableAppGraph` (или в новый `ProductionAppGraph`, который вернёт `CatscriptorApp.createGraph()`).
+2. Подставить его в `ProductionAppGraph` (`CatscriptorApp.createGraph()`); честные заглушки остаются в `UnavailableAppGraph`.
 3. Экраны и ViewModel не меняются.
 
 | Интерфейс | Задача | Что отдаёт UI |

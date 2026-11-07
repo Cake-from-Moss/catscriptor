@@ -6,5 +6,5 @@ import android.app.Application
 open class CatscriptorApp : Application() {
     val graph: AppGraph by lazy { createGraph() }
 
-    protected open fun createGraph(): AppGraph = UnavailableAppGraph()
+    protected open fun createGraph(): AppGraph = ProductionAppGraph(this)
 }
