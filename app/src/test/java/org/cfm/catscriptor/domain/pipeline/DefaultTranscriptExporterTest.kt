@@ -13,7 +13,7 @@ class DefaultTranscriptExporterTest {
     private val exporter = DefaultTranscriptExporter()
 
     private fun utterance(start: Long = 1250, end: Long = 4380, text: String = "Добрый день!", speaker: String = "speaker_1") =
-        Utterance(speaker, start, end, text, listOf(TimedWord("исходник", TimeRange(start, end))))
+        Utterance(speaker, start, end, text)
 
     private fun export(transcript: Transcript, format: TranscriptFormat): ByteArray {
         val output = ByteArrayOutputStream()

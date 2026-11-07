@@ -24,6 +24,7 @@ internal data class PipelineEntry(
     val prepareElapsedMs: Long = 0,
     val hidden: Boolean = false,
     val pendingCommitDelete: Boolean = false,
+    val processingState: org.cfm.catscriptor.audio.background.AudioProcessingState? = null,
 ) {
     fun toSummary() = RecordingSummary(
         id = id,
@@ -34,7 +35,7 @@ internal data class PipelineEntry(
         speakerCount = null,
         previewSpeakerId = null,
         previewSpeakerName = null,
-        previewText = null,
+        previewText = processingState?.asrDraft?.firstOrNull()?.text,
         status = status,
     )
 }

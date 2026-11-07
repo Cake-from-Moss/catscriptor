@@ -100,6 +100,24 @@ class BundledModelStoreTest {
         }
     }
 
+    @Test fun vadHasItsOwnStrictManifestAndDoesNotReplaceGigaam() {
+        val manifest = """
+            model.id=silero-test
+            model.directory=models/silero-test
+            files=silero_vad.onnx,LICENSE
+            silero_vad.onnx.size=1
+            silero_vad.onnx.sha256=${sha(byteArrayOf(1))}
+            LICENSE.size=1
+            LICENSE.sha256=${sha(byteArrayOf(1))}
+        """.trimIndent()
+        assertEquals(setOf("silero_vad.onnx", "LICENSE"),
+            BundledModelSpec.readVad(manifest.byteInputStream()).files.map { it.name }.toSet())
+        assertThrows(IllegalArgumentException::class.java) { BundledModelSpec.read(manifest.byteInputStream()) }
+        assertThrows(IllegalArgumentException::class.java) {
+            BundledModelSpec.readVad(manifest.replace("silero_vad.onnx,LICENSE", "silero_vad.onnx,LICENSE,LICENSE").byteInputStream())
+        }
+    }
+
     private fun sha(data: ByteArray) = MessageDigest.getInstance("SHA-256")
         .digest(data).joinToString("") { "%02x".format(it) }
 }

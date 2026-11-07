@@ -1,29 +1,22 @@
 package org.cfm.catscriptor.domain.pipeline
 
 /**
- * Слова принадлежат этому спикеру и сохраняют исходную привязку ASR к аудио после коррекции.
- * Локальная LLM может исправить [text]; он не обязан дословно совпадать с исходными словами.
- * Исправленный текст нельзя представлять как результат с новой пословной привязкой к аудио.
+ * Реплика спикера с абсолютным интервалом аудио, без обязательной пословной привязки.
+ * Локальная LLM исправляет [text], сохраняя спикера и исходные границы реплики.
  */
 data class Utterance(
     val speakerId: String,
     val startMs: Long,
     val endMs: Long,
     val text: String,
-    val words: List<TimedWord>,
 ) {
     init {
         requireSpeakerId(speakerId)
-        val time = TimeRange(startMs, endMs)
-        require(words.isNotEmpty()) { "An utterance must retain its source words" }
-        require(words.all { time.contains(it.time) }) { "Words must lie inside the utterance" }
-        require(words.zipWithNext().all { (a, b) -> a.time.startMs <= b.time.startMs }) {
-            "Words must be ordered by start time"
-        }
+        TimeRange(startMs, endMs)
     }
 }
 
-/** Экспортируются только speakerId/startMs/endMs/text; внутренняя привязка слов не входит в JSON. */
+/** Реплики отсортированы по началу; экспортируются только speakerId/startMs/endMs/text. */
 data class Transcript(val transcript: List<Utterance>) {
     init {
         require(transcript.zipWithNext().all { (a, b) -> a.startMs <= b.startMs }) {

@@ -119,7 +119,7 @@ fun TranscriptRoute(graph: AppGraph, navigator: AppNavigator, recordingId: Strin
         null -> Unit
     }
 
-    if (state.exportOpen && document != null) {
+    if (state.exportOpen && document != null && document.asrDraft == null) {
         ScopedViewModels(key = "export-$recordingId") {
             ExportSheetRoute(graph = graph, recordingId = recordingId, onDismiss = viewModel::onExportDismiss)
         }

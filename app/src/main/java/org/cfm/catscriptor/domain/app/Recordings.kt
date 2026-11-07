@@ -7,6 +7,7 @@ enum class RecordingSource { MICROPHONE, FILE }
 /** Состояние записи в библиотеке. Подробности обработки лежат в [ProcessingJob]. */
 sealed interface RecordingStatus {
     data object Ready : RecordingStatus
+    data object AsrReady : RecordingStatus
     data object Queued : RecordingStatus
     data class Processing(val fraction: Float, val stage: ProcessingStage) : RecordingStatus
     data class Failed(val stage: ProcessingStage) : RecordingStatus
@@ -55,8 +56,10 @@ data class TranscriptDocument(
     val speakers: List<SpeakerInfo>,
     val lines: List<TranscriptLine>,
     val bookmarksMs: List<Long> = emptyList(),
+    val asrDraft: List<org.cfm.catscriptor.domain.pipeline.AsrSegment>? = null,
 ) {
     init {
+        require(asrDraft == null || (lines.isEmpty() && speakers.isEmpty()))
         // Поиск текущей реплики в плеере бинарный и опирается на этот порядок.
         require(lines.zipWithNext().all { (a, b) -> a.startMs <= b.startMs }) {
             "Lines must be ordered by start time"
