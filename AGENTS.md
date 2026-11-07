@@ -1,6 +1,6 @@
 # AGENTS.md — catscriptor (Neuro-stenographer)
 
-Reply to the team in Russian. Code, identifiers and comments: English.
+Reply to the team in Russian. Code and identifiers: English. All code comments, including KDoc: Russian.
 
 Nuclear IT Hack (November 2026): Android app that turns audio recordings of conversations into a transcript with speakers and timestamps, **fully on-device**.
 
@@ -22,6 +22,8 @@ Judging: organizers install our APK, import 3 Russian recordings (cat dialogues)
 
 `speaker_id` is `speaker_N`; `start_ms` and `end_ms` are integers from the recording start, `start_ms < end_ms`; utterances are sorted by `start_ms`. No renamed fields or extra wrappers. Any export change needs a schema test.
 
+Official specification (slides 8, 9, 14, 15, 17): timestamps belong to utterances, not individual words. Mandatory `TimedWord` / forced alignment was an obsolete architectural decision. ASR returns text and the absolute interval of the processed audio fragment, sourced from VAD or speaker segmentation. Word alignment is optional research, never an MVP prerequisite. A VAD segment may contain several speakers: issue #6 may refine intervals and re-run ASR on shorter speaker turns before assigning `speaker_N`; do not split recognized text into speakers using invented word timestamps.
+
 ## Scope
 
 MVP: import via SAF (`ActivityResultContracts.OpenDocument`), speech-to-text, diarization, utterance timestamps, transcript screen, export to text and JSON.
@@ -39,7 +41,8 @@ The Compose plugin version (`kotlin` in the catalog) must equal the Kotlin bundl
 Models:
 
 - ASR (team choice): sherpa-onnx + GigaAM. Pick the v3 variant (CTC or transducer, with or without punctuation) by WER and RTF.
-- Not final: VAD Silero; diarization pyannote segmentation + 3D-Speaker/NeMo embeddings + clustering (sherpa-onnx); LLM small GGUF q4 (e.g. Qwen2.5 0.5B–1.5B) via llama.cpp or MediaPipe.
+- Diarization (team decision, see docs/diarization.md): CAM++ embeddings of 1.5 s windows inside VAD speech (sherpa-onnx extractor) + spectral clustering in Kotlin; the pyannote + sherpa clustering pipeline was removed after it found 1 of 2 and 8 of 4 speakers.
+- Not final: VAD Silero; LLM small GGUF q4 (e.g. Qwen2.5 0.5B–1.5B) via llama.cpp or MediaPipe.
 
 ## Pipeline
 
@@ -47,9 +50,9 @@ Each stage is a separate module behind an interface:
 
 1. Decode any format to 16 kHz mono PCM (`MediaExtractor` + `MediaCodec`)
 2. VAD
-3. ASR per segment: text + timestamps
-4. Diarization
-5. Merge: assign speakers by interval overlap, join adjacent utterances of one speaker
+3. ASR per audio fragment: text + absolute fragment interval, without mandatory word alignment
+4. Diarization (issue #6): refine speaker-turn intervals and re-run ASR where necessary
+5. Merge: assign speakers to suitable fragments by interval overlap, join adjacent utterances of one speaker; never infer word boundaries to split text
 6. LLM correction of the ASR text
 7. Result model and export
 

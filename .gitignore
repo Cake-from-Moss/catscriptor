@@ -1,5 +1,6 @@
 *.iml
 .gradle
+.kotlin/
 /local.properties
 /.idea/caches
 /.idea/libraries
@@ -21,7 +22,16 @@ local.properties
 *.onnx
 *.bin
 app/src/main/assets/models/
+/dependencies/*.aar
+/.model-cache/
+/app/src/androidTest/assets/sherpa-example.wav
+/app/src/androidTest/assets/two-speakers-en.wav
+/app/src/main/assets/third-party/
 
 # Signing keys
 *.jks
 *.keystore
+scripts/__pycache__/
+
+# Vendored inference engine (pinned by dependencies/llama-cpp.properties)
+/dependencies/llama.cpp/
