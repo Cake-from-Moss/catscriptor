@@ -17,6 +17,7 @@ interface SpeakerEmbedder {
  * Окна эмбеддингов — как в рецепте 3D-Speaker для CAM++ (1,5 с с шагом 0,75 с).
  *
  * @property minWindowMs сегмент VAD короче окна, но не короче этого, даёт одно окно на всю длину.
+ * @property boundarySnapMs радиус поиска паузы вокруг смены спикера; 0 — не уточнять границу.
  *
  * Хвост сегмента после последнего полного окна (короче [hopMs]) отдельного окна не получает и
  * принадлежит спикеру последнего окна: окно, выровненное по концу реплики, захватывает затухание
@@ -26,11 +27,13 @@ data class EmbeddingDiarizerSettings(
     val windowMs: Long = 1_500,
     val hopMs: Long = 750,
     val minWindowMs: Long = 500,
+    val boundarySnapMs: Long = 400,
     val readBlockSamples: Int = 8192,
     val clustering: SpeakerClusteringSettings = SpeakerClusteringSettings(),
 ) {
     init {
         require(hopMs in 1..windowMs && minWindowMs in 1..windowMs && readBlockSamples > 0)
+        require(boundarySnapMs in 0..hopMs)
     }
 }
 
@@ -90,7 +93,8 @@ class EmbeddingDiarizer(
                 if (smoothed[i] == smoothed[i + 1]) continue
                 val left = embedded[own[i]].time
                 val right = embedded[own[i + 1]].time
-                val boundary = ((right.startMs + left.endMs) / 2).coerceIn(start, range.endMs)
+                val estimate = ((right.startMs + left.endMs) / 2).coerceIn(start, range.endMs)
+                val boundary = snapToPause(audio, estimate, start, range.endMs)
                 if (boundary > start) result += smoothed[i] to TimeRange(start, boundary)
                 start = boundary
             }
@@ -111,6 +115,44 @@ class EmbeddingDiarizer(
             start += settings.hopMs
         }
         return result
+    }
+
+    /**
+     * Уточнение границы смены спикера по энергии сигнала.
+     *
+     * Середина перекрытия окон ошибается до ±0,375 с (половина шага), и граница попадает внутрь
+     * слова: ASR получает два обрубка, и слово на стыке теряется в обоих ходах. Прогон GigaAM v3
+     * на склеенном диалоге показал: сдвиг границы на 200–350 мс даёт до 13% WER, а перенос
+     * границы в самый тихий участок в пределах ±[EmbeddingDiarizerSettings.boundarySnapMs]
+     * возвращает WER к исходному. Между репликами разных людей почти всегда есть короткая пауза
+     * или вдох, даже если VAD склеил их в один сегмент (minSilenceMs больше паузы).
+     *
+     * Кадр 20 мс с шагом 10 мс; среди кадров не громче двукратного минимума выбирается ближайший
+     * к исходной оценке: при ровной тишине граница не уезжает на край области поиска.
+     */
+    private suspend fun snapToPause(audio: PcmAudioSource, estimate: Long, lowerMs: Long, upperMs: Long): Long {
+        val radius = settings.boundarySnapMs
+        if (radius == 0L) return estimate
+        val from = maxOf(lowerMs, estimate - radius)
+        val to = minOf(upperMs, estimate + radius)
+        if (to - from < FRAME_MS) return estimate
+        val samples = read(audio, TimeRange(from, to))
+        val frame = (FRAME_MS * PER_MS).toInt()
+        val hop = (HOP_MS * PER_MS).toInt()
+        val centers = ArrayList<Long>()
+        val energies = ArrayList<Double>()
+        var offset = 0
+        while (offset + frame <= samples.size) {
+            var sum = 0.0
+            for (k in offset until offset + frame) sum += samples[k].toDouble() * samples[k]
+            energies += sum / frame
+            centers += from + (offset + frame / 2) / PER_MS
+            offset += hop
+        }
+        if (energies.isEmpty()) return estimate
+        val limit = energies.min() * 2 + 1e-12
+        val best = energies.indices.filter { energies[it] <= limit }.minBy { abs(centers[it] - estimate) }
+        return centers[best].coerceIn(lowerMs, upperMs)
     }
 
     /** Метка A B A внутри одного сегмента — почти наверняка ошибка окна, а не реплика длиной 0,75 с. */
@@ -156,5 +198,7 @@ class EmbeddingDiarizer(
 
     private companion object {
         const val PER_MS = PcmAudioSource.SAMPLE_RATE_HZ / 1000L
+        const val FRAME_MS = 20L
+        const val HOP_MS = 10L
     }
 }

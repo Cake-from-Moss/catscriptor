@@ -8,10 +8,12 @@ import org.junit.Test
 class CorrectionPromptTest {
 
     @Test fun systemPromptDeclaresEditorRoleAndForbidsAdditions() {
-        val system = CorrectionPrompt.SYSTEM
+        val system = CorrectionPrompt.SYSTEM.lowercase()
         assertTrue(system.contains("корректор"))
         assertTrue(system.contains("отрицания"))
         assertTrue(system.contains("числа"))
+        assertTrue(system.contains("слово в слово"))
+        assertTrue(system.contains("не удаляй, не добавляй и не переставляй"))
         assertTrue(system.contains("Только исправленный текст".lowercase()) ||
             system.lowercase().contains("верни только исправленный текст"))
     }

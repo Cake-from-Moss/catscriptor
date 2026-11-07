@@ -81,6 +81,37 @@ class EmbeddingDiarizerTest {
     }
 
     @Test
+    fun speakerChangeBoundarySnapsToPauseBetweenVoices() = runTest {
+        // A 0–5,9 с, пауза 5,9–6,0 (тишина, VAD её не разрывает), B 6,0–12 с.
+        val pcm = PausePcm(12_000, pause = 5_900L until 6_000L) { if (it < 6_000) 0 else 1 }
+        val result = diarizer(LevelEmbedder(2)).diarize(pcm, speech(0L to 12_000L))
+        assertEquals(listOf("speaker_1", "speaker_2"), result.map { it.speakerId })
+        assertTrue("граница в паузе: ${result[0].time}", result[0].time.endMs in 5_900L..6_000L)
+    }
+
+    @Test
+    fun boundarySnapCanBeDisabled() = runTest {
+        val pcm = PausePcm(12_000, pause = 5_900L until 6_000L) { if (it < 6_000) 0 else 1 }
+        val plain = EmbeddingDiarizer({ LevelEmbedder(2) }, EmbeddingDiarizerSettings(boundarySnapMs = 0))
+            .diarize(pcm, speech(0L to 12_000L))
+        assertEquals(2, plain.size)
+        assertEquals(plain[0].time.endMs, plain[1].time.startMs)
+    }
+
+    /** Как [VoicePcm], но в [pause] — цифровая тишина. */
+    private class PausePcm(durationMs: Long, private val pause: LongRange, private val speakerAt: (Long) -> Int) : PcmAudioSource {
+        override val sampleCount = durationMs * 16
+        override suspend fun read(startSample: Long, maxSamples: Int): FloatArray {
+            val count = minOf(maxSamples.toLong(), sampleCount - startSample).toInt()
+            return FloatArray(count) {
+                val ms = (startSample + it) / 16
+                if (ms in pause) 0f else level(speakerAt(ms))
+            }
+        }
+        override fun close() = Unit
+    }
+
+    @Test
     fun noSpeechNoEmbedderCalls() = runTest {
         val embedder = LevelEmbedder(1)
         val pcm = VoicePcm(5_000) { 0 }

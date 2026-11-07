@@ -14,8 +14,9 @@ import org.cfm.catscriptor.domain.pipeline.TranscriptionBackend
 
 /**
  * GigaAM v3 CTC: один ленивый recognizer, абсолютный интервал целиком от вызывающего кода.
- * Порции до 25 секунд не перекрываются: слово на стыке может оборваться. Конкатенация текста
- * не создаёт пословных меток и не требует экспериментальных CTC posterior.
+ * Порции до 25 секунд не перекрываются; разрез ставится в самый тихий кадр последних
+ * [CUT_SEARCH_SAMPLES] порции (см. [quietCut]), чтобы не рубить слово пополам. Конкатенация
+ * текста не создаёт пословных меток и не требует экспериментальных CTC posterior.
  * После ошибки или отмены backend закрывается; для повтора нужен новый экземпляр.
  */
 class SherpaTranscriptionBackend internal constructor(
@@ -66,14 +67,17 @@ class SherpaTranscriptionBackend internal constructor(
                         }
                         checkOpen()
                         coroutine.ensureActive()
-                        val part = recognize(samples).trim()
+                        // Не последняя порция: обрезаем по паузе, остаток пойдёт в следующую.
+                        val cut = if (offset + samples.size < end) quietCut(samples) else samples.size
+                        val chunk = if (cut == samples.size) samples else samples.copyOf(cut)
+                        val part = recognize(chunk).trim()
                         coroutine.ensureActive()
                         checkOpen()
                         if (part.isNotEmpty()) {
                             if (text.isNotEmpty()) text.append(' ')
                             text.append(part)
                         }
-                        offset += samples.size
+                        offset += cut
                     }
                     AsrSegment(time = time, text = text.toString())
                 }
@@ -98,5 +102,31 @@ class SherpaTranscriptionBackend internal constructor(
     companion object {
         private const val SAMPLES_PER_MS = 16L
         internal const val MAX_CHUNK_SAMPLES = 25 * 16000
+        internal const val CUT_SEARCH_SAMPLES = 3 * 16000
+        private const val FRAME = 320
+        private const val HOP = 160
+
+        /**
+         * Индекс разреза: центр самого тихого 20-мс кадра в последних 3 с порции.
+         * Пауза между словами на 20–40 дБ тише речи, поэтому минимум энергии почти всегда
+         * попадает между словами; потеря порции до 3 с не важна — остаток уйдёт в следующую.
+         */
+        internal fun quietCut(samples: FloatArray): Int {
+            if (samples.size <= CUT_SEARCH_SAMPLES) return samples.size
+            var best = samples.size
+            var bestEnergy = Double.MAX_VALUE
+            var start = samples.size - CUT_SEARCH_SAMPLES
+            while (start + FRAME <= samples.size) {
+                var sum = 0.0
+                for (k in start until start + FRAME) sum += samples[k].toDouble() * samples[k]
+                // При равной энергии — более поздний кадр: порции длиннее, разрезов меньше.
+                if (sum <= bestEnergy) {
+                    bestEnergy = sum
+                    best = start + FRAME / 2
+                }
+                start += HOP
+            }
+            return best
+        }
     }
 }

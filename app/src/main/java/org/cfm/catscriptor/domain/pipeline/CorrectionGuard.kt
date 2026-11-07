@@ -10,16 +10,23 @@ package org.cfm.catscriptor.domain.pipeline
  * Фильтр намеренно консервативен: лучше отклонить полезную правку, чем пропустить
  * галлюцинацию. Он не доказывает сохранение смысла — только отсекает типовые поломки.
  * Все пороги задаются [CorrectionGuardConfig].
+ *
+ * Прошедший проверки кандидат не применяется как есть: [CorrectionReconciler] собирает итоговый
+ * текст из слов ASR и пунктуации/регистра LLM, поэтому удалённые слова возвращаются,
+ * добавленные выбрасываются, а замена слова допускается только как близкая по написанию.
  */
-class CorrectionGuard(private val config: CorrectionGuardConfig = CorrectionGuardConfig()) {
+class CorrectionGuard(
+    private val config: CorrectionGuardConfig = CorrectionGuardConfig(),
+    private val reconciler: CorrectionReconciler = CorrectionReconciler(),
+) {
 
     /** Результат проверки: [Decision.accept] — можно применять, иначе вернуть исходный текст. */
     sealed interface Decision {
         val accept: Boolean
         val reason: String
 
-        /** Правка допустима. */
-        data class Accept(val normalizedCandidate: List<String>) : Decision {
+        /** Правка допустима; [text] — итоговый текст после пословного согласования с ASR. */
+        data class Accept(val text: String, val details: CorrectionReconciler.Result) : Decision {
             override val accept: Boolean get() = true
             override val reason: String get() = "OK"
         }
@@ -85,7 +92,9 @@ class CorrectionGuard(private val config: CorrectionGuardConfig = CorrectionGuar
             return Decision.UseOriginal("TOO_DIFFERENT")
         }
 
-        return Decision.Accept(candidateWords)
+        val reconciled = reconciler.reconcile(original, cleaned)
+        if (reconciled.text.isBlank()) return Decision.UseOriginal("EMPTY_CANDIDATE")
+        return Decision.Accept(reconciled.text, reconciled)
     }
 
     /** Нормализация: ё→е, нижний регистр, только буквы и цифры как слова. */

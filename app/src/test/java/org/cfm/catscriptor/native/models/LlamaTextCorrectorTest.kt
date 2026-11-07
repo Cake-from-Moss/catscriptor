@@ -30,6 +30,8 @@ class LlamaTextCorrectorTest {
         var unloaded = 0
         var cancels = 0
         val userPrompts = mutableListOf<String>()
+        val maxTokens = mutableListOf<Int>()
+        val penalties = mutableListOf<Float>()
         val responses = ArrayDeque<String>()
         var failure: Throwable? = null
         var gate: GenerationGate? = null
@@ -54,6 +56,8 @@ class LlamaTextCorrectorTest {
             presencePenalty: Float,
         ): String {
             userPrompts += userPrompt
+            this.maxTokens += maxTokens
+            penalties += presencePenalty
             failure?.let { throw it }
             gate?.let {
                 it.started.countDown()
@@ -99,6 +103,44 @@ class LlamaTextCorrectorTest {
         assertEquals("speaker_1", utterance.speakerId)
         assertEquals(1250, utterance.startMs)
         assertEquals(4380, utterance.endMs)
+    }
+
+    @Test fun droppedWordIsRestoredInsteadOfLost() = runTest {
+        // Реальный ответ Qwen2.5-1.5B: «только сначала» потеряно; прежний guard это пропускал.
+        val bridge = FakeBridge()
+        val sut = corrector(bridge, listOf("Хорошо, только найди его любимую мышку. Она где-то под диваном."))
+        val text = sut.correct(utterance.copy(text = "хорошо только сначала найди его любимую мышку она где то под диваном"))
+        assertEquals("Хорошо, только сначала найди его любимую мышку. Она где-то под диваном.", text)
+    }
+
+    @Test fun longUtteranceIsCorrectedInChunksWithoutTruncation() = runTest {
+        val bridge = FakeBridge()
+        val words = (1..100).map { "слово" + "абвгдежзиклмнопрстуф"[it % 20] + "к" }
+        // Модель вернула фрагменты как есть: итог — исходный текст целиком, без потерянного хвоста.
+        val sut = corrector(bridge, emptyList())
+        bridge.responses.addAll(listOf(words.take(34), words.subList(34, 68), words.drop(68)).map { it.joinToString(" ") })
+        val text = sut.correct(utterance.copy(text = words.joinToString(" ")))
+        assertEquals(3, bridge.userPrompts.size)
+        assertEquals(listOf(34, 34, 32), bridge.userPrompts.map { it.split(" ").size })
+        assertEquals(words.joinToString(" ").lowercase(), text.lowercase())
+        assertTrue(bridge.maxTokens.all { it >= 34 * 4 })
+    }
+
+    @Test fun chunkBoundaryDoesNotBreakSentence() = runTest {
+        val bridge = FakeBridge()
+        val words = (1..50).map { "слово" + "абвгдежзиклмнопрстуф"[it % 20] + "к" }
+        // Модель закрыла каждый фрагмент точкой и начала с заглавной — как настоящая Qwen.
+        val sut = corrector(bridge, emptyList())
+        bridge.responses.addAll(listOf(words.take(25), words.drop(25)).map { it.joinToString(" ").replaceFirstChar(Char::uppercaseChar) + "." })
+        val text = sut.correct(utterance.copy(text = words.joinToString(" ")))
+        val expected = words.joinToString(" ").replaceFirstChar(Char::uppercaseChar) + "."
+        assertEquals(expected, text)
+    }
+
+    @Test fun presencePenaltyIsOffByDefault() = runTest {
+        val bridge = FakeBridge()
+        corrector(bridge, listOf("Ну, давай встретимся завтра, в пятницу.")).correct(utterance)
+        assertEquals(listOf(0f), bridge.penalties)
     }
 
     @Test fun loadsModelOnceForManyUtterances() = runTest {

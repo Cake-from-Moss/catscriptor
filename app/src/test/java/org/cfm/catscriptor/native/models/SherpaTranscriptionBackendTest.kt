@@ -37,13 +37,30 @@ class SherpaTranscriptionBackendTest {
         val result = backend.transcribe(audio, SpeechSegment(time))
         assertEquals(time, result.time)
         assertEquals("речь речь речь", result.text)
-        assertEquals(listOf(400000, 400000, 17616), chunks)
+        // Ровная тишина: разрез в последнем кадре порции (центр 20-мс кадра, 160 сэмплов до конца).
+        assertEquals(listOf(399840, 399840, 17936), chunks)
         assertEquals(1234 * 16L, audio.offsets.first())
         assertEquals(0, resource.closes)
         backend.close()
         backend.close()
         assertEquals(1, resource.closes)
         assertFalse(audio.closed)
+    }
+
+    @Test fun quietCutFindsPauseInsideSearchZone() {
+        val samples = FloatArray(SherpaTranscriptionBackend.MAX_CHUNK_SAMPLES) { 0.5f }
+        // Пауза 100 мс за 1,5 с до конца порции.
+        val pause = samples.size - 24_000
+        samples.fill(0f, pause, pause + 1_600)
+        val cut = SherpaTranscriptionBackend.quietCut(samples)
+        assertTrue("разрез $cut внутри паузы", cut in pause..pause + 1_600)
+    }
+
+    @Test fun quietCutDoesNotLookBeforeSearchZone() {
+        val samples = FloatArray(SherpaTranscriptionBackend.MAX_CHUNK_SAMPLES) { 0.5f }
+        samples.fill(0f, 0, 16_000)
+        val cut = SherpaTranscriptionBackend.quietCut(samples)
+        assertTrue(cut >= samples.size - SherpaTranscriptionBackend.CUT_SEARCH_SAMPLES)
     }
 
     @Test fun longOffsetsAndLastPartialMillisecondAndBlankText() = runBlocking {

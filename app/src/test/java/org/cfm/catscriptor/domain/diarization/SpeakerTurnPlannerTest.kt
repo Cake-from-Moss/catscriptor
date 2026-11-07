@@ -59,6 +59,37 @@ class SpeakerTurnPlannerTest {
         assertEquals(2, separate.size)
     }
 
+    @Test fun shortTurnBetweenDifferentSpeakersKeepsItsAudio() {
+        // Короткий ход speaker_2 вплотную к speaker_3: аудио не выбрасывается, а уходит соседу.
+        val turns = planner.plan(
+            listOf(spk(1, 0, 2_000), spk(2, 2_000, 2_200), spk(3, 2_200, 4_000)),
+            listOf(vad(0, 4_000)),
+        )
+        assertEquals(listOf(Triple("speaker_1", 0L, 2_200L), Triple("speaker_3", 2_200L, 4_000L)), turns.compact())
+    }
+
+    @Test fun shortFirstTurnJoinsNextSpeaker() {
+        val turns = planner.plan(listOf(spk(2, 0, 200), spk(1, 200, 3_000)), listOf(vad(0, 3_000)))
+        assertEquals(listOf(Triple("speaker_1", 0L, 3_000L)), turns.compact())
+    }
+
+    @Test fun twoTouchingShortTurnsTogetherLongEnoughAreKept() {
+        // 200 + 200 мс вплотную, вокруг паузы: вместе ход длиннее minTurnMs и не выбрасывается.
+        val turns = planner.plan(
+            listOf(spk(1, 0, 2_000), spk(2, 5_000, 5_200), spk(1, 5_200, 5_400), spk(1, 9_000, 11_000)),
+            listOf(vad(0, 2_000), vad(5_000, 5_400), vad(9_000, 11_000)),
+        )
+        assertEquals(listOf(Triple("speaker_1", 0L, 2_000L), Triple("speaker_1", 5_000L, 5_400L), Triple("speaker_1", 9_000L, 11_000L)), turns.compact())
+    }
+
+    @Test fun isolatedShortTurnIsStillDropped() {
+        val turns = planner.plan(
+            listOf(spk(1, 0, 2_000), spk(2, 5_000, 5_200), spk(1, 9_000, 11_000)),
+            listOf(vad(0, 2_000), vad(5_000, 5_200), vad(9_000, 11_000)),
+        )
+        assertEquals(listOf("speaker_1", "speaker_1"), turns.map { it.speakerId })
+    }
+
     @Test fun tooShortTurnsAreDropped() {
         val turns = planner.plan(listOf(spk(1, 0, 2_000), spk(2, 2_100, 2_250), spk(1, 2_300, 4_000)), listOf(vad(0, 4_000)))
         assertEquals(listOf(Triple("speaker_1", 0L, 4_000L)), turns.compact())

@@ -43,6 +43,8 @@ class LlamaTextCorrector internal constructor(
     init {
         require(config.threads in 1..8) { "Число потоков должно быть от 1 до 8" }
         require(config.contextSize in 256..8192) { "Контекст LLM вне допустимого диапазона" }
+        require(config.maxChunkWords in 1..200) { "Размер фрагмента LLM вне допустимого диапазона" }
+        require(config.presencePenalty >= 0f) { "Штраф повтора не может быть отрицательным" }
     }
 
     override suspend fun correct(utterance: Utterance): String {
@@ -79,23 +81,33 @@ class LlamaTextCorrector internal constructor(
                             loaded = true
                         }
                     }
-                    coroutine.ensureActive()
-                    val raw = bridge.generate(
-                        sessionId = session,
-                        systemPrompt = CorrectionPrompt.SYSTEM,
-                        userPrompt = CorrectionPrompt.buildUserMessage(original),
-                        maxTokens = maxOutputTokensFor(original),
-                        temperature = config.temperature,
-                        topP = config.topP,
-                        topK = config.topK,
-                        presencePenalty = config.presencePenalty,
-                    )
-                    coroutine.ensureActive()
-                    val candidate = CorrectionPrompt.sanitize(raw)
-                    when (guard.verify(original, candidate)) {
-                        is CorrectionGuard.Decision.Accept -> candidate
-                        is CorrectionGuard.Decision.UseOriginal -> original
+                    // Каждый фрагмент проверяется guard отдельно: отклонённый фрагмент остаётся
+                    // текстом ASR и не тянет за собой остальные.
+                    val chunks = chunksOf(original)
+                    val parts = chunks.mapIndexed { index, chunk ->
+                        coroutine.ensureActive()
+                        val raw = bridge.generate(
+                            sessionId = session,
+                            systemPrompt = CorrectionPrompt.SYSTEM,
+                            userPrompt = CorrectionPrompt.buildUserMessage(chunk),
+                            maxTokens = maxOutputTokensFor(chunk),
+                            temperature = config.temperature,
+                            topP = config.topP,
+                            topK = config.topK,
+                            presencePenalty = config.presencePenalty,
+                        )
+                        coroutine.ensureActive()
+                        val candidate = CorrectionPrompt.sanitize(raw)
+                        when (val decision = guard.verify(chunk, candidate)) {
+                            is CorrectionGuard.Decision.Accept -> decision.text
+                            is CorrectionGuard.Decision.UseOriginal -> chunk
+                        }.let { text ->
+                            // Граница фрагмента — не конец предложения: точку, которую модель
+                            // поставила из-за обрыва текста, убираем.
+                            if (index < chunks.lastIndex) text.removeSuffix(".") else text
+                        }
                     }
+                    joinChunks(parts)
                 } finally {
                     // При нормальном завершении просто останавливаем наблюдателя; его finally
                     // (bridge.cancel) при этом тоже выполнится — флаг безвреден: следующая
@@ -109,10 +121,39 @@ class LlamaTextCorrector internal constructor(
         }
     }
 
-    /** Потолок выходных токенов: короткой фразе — короткий ответ, без бесконтрольной генерации. */
-    private fun maxOutputTokensFor(original: String): Int {
-        val words = original.trim().split(Regex("\\s+")).size
-        return (words * 3 + 32).coerceIn(32, config.maxOutputTokens)
+    /**
+     * Потолок выходных токенов: короткой фразе — короткий ответ, без бесконтрольной генерации.
+     * 4 токена на слово: русское слово у Qwen — 2–4 токена плюс пунктуация; при 3 ответ на
+     * фрагмент из 40 слов обрезался, и хвост реплики терялся.
+     */
+    private fun maxOutputTokensFor(chunk: String): Int {
+        val words = chunk.trim().split(WHITESPACE).size
+        return (words * 4 + 32).coerceIn(32, config.maxOutputTokens)
+    }
+
+    /**
+     * Склейка фрагментов: фрагмент, продолжающий предложение (предыдущий не кончается на
+     * `.`/`!`/`?`/`…`), начинается со строчной буквы — заглавную ему поставила модель
+     * или согласователь только потому, что фрагмент начинал запрос.
+     */
+    private fun joinChunks(parts: List<String>): String {
+        val result = StringBuilder()
+        for (part in parts) {
+            if (part.isEmpty()) continue
+            val continues = result.isNotEmpty() && result.last() !in ".!?…"
+            if (result.isNotEmpty()) result.append(' ')
+            result.append(if (continues) part.replaceFirstChar { it.lowercaseChar() } else part)
+        }
+        return result.toString()
+    }
+
+    /** Деление текста на почти равные фрагменты по словам: без короткого хвоста из 1–2 слов без контекста. */
+    private fun chunksOf(text: String): List<String> {
+        val words = text.trim().split(WHITESPACE)
+        if (words.size <= config.maxChunkWords) return listOf(text.trim())
+        val count = (words.size + config.maxChunkWords - 1) / config.maxChunkWords
+        val size = (words.size + count - 1) / count
+        return words.chunked(size) { it.joinToString(" ") }
     }
 
     override fun close() = synchronized(lock) {
@@ -130,6 +171,8 @@ class LlamaTextCorrector internal constructor(
     }
 
     companion object {
+        private val WHITESPACE = Regex("\\s+")
+
         /**
          * Android-фабрика: читает llm-manifest, копирует GGUF с проверкой SHA-256 во внутреннее
          * хранилище (однократно, повторно не копируется) и отдаёт путь к файлу.

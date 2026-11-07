@@ -190,8 +190,11 @@ llama_sampler *build_sampler(const llama_vocab *vocab, float temperature, float 
     llama_sampler *chain = llama_sampler_chain_init(params);
     if (chain == nullptr) return nullptr;
     const int32_t n_vocab = llama_vocab_n_tokens(vocab);
-    llama_sampler_chain_add(chain, llama_sampler_init_penalties(
-            n_vocab, 64, 1.0f, 0.0f, presence_penalty));
+    // Штраф подключается только при ненулевом значении: в режиме коррекции он выключен.
+    if (presence_penalty > 0.0f) {
+        llama_sampler_chain_add(chain, llama_sampler_init_penalties(
+                n_vocab, 64, 1.0f, 0.0f, presence_penalty));
+    }
     if (temperature <= 0.0f) {
         llama_sampler_chain_add(chain, llama_sampler_init_greedy());
     } else {
