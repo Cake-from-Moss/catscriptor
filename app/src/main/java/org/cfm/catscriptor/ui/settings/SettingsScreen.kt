@@ -51,6 +51,7 @@ class SettingsActions(
     val onSpeakerCountChange: (Int?) -> Unit,
     val onExportFormatChange: (ExportFormat) -> Unit,
     val onLiveTextChange: (Boolean) -> Unit,
+    val onTextCorrectionChange: (Boolean) -> Unit = {},
 )
 
 @Composable
@@ -120,6 +121,19 @@ fun SettingsScreen(state: SettingsUiState, actions: SettingsActions, modifier: M
                         value = state.settings.liveTextEnabled,
                         role = Role.Switch,
                         onValueChange = actions.onLiveTextChange,
+                    ),
+                )
+            }
+            section(R.string.settings_correction, divider = false) {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.settings_correction_title)) },
+                    supportingContent = { Text(stringResource(R.string.settings_correction_body)) },
+                    trailingContent = { Switch(checked = state.settings.textCorrectionEnabled, onCheckedChange = null) },
+                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.toggleable(
+                        value = state.settings.textCorrectionEnabled,
+                        role = Role.Switch,
+                        onValueChange = actions.onTextCorrectionChange,
                     ),
                 )
             }

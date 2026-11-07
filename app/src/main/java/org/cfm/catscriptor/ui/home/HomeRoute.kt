@@ -37,6 +37,11 @@ import org.cfm.catscriptor.ui.navigation.LocalAppSnackbar
 import org.cfm.catscriptor.ui.navigation.TopTab
 import org.cfm.catscriptor.viewmodel.home.HomeEvent
 import org.cfm.catscriptor.viewmodel.home.HomeViewModel
+import org.cfm.catscriptor.domain.app.RecordingSummary
+import org.cfm.catscriptor.ui.recordings.TextInputDialog
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 
 /**
  * Связывает главный экран с графом: ViewModel, системные диалоги (разрешение на микрофон,
@@ -51,6 +56,9 @@ fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest
     val resources = LocalResources.current
     val snackbar = LocalAppSnackbar.current
     val scope = rememberCoroutineScope()
+    var renameTarget by remember { mutableStateOf<RecordingSummary?>(null) }
+    var correctionTarget by remember { mutableStateOf<RecordingSummary?>(null) }
+    var correctingId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(processingDetailsRequest) { viewModel.onDetailsRequest(processingDetailsRequest) }
 
@@ -98,7 +106,7 @@ fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest
         }
     }
 
-    val actions = remember(viewModel, navigator) {
+    val actions = remember(viewModel, navigator, correctingId) {
         HomeActions(
             onRecord = {
                 when {
@@ -111,11 +119,30 @@ fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest
                 }
             },
             onStop = viewModel::stopRecording,
+            onCancelRecording = viewModel::cancelRecording,
+            onDeleteRecording = { id ->
+                scope.launch {
+                    try {
+                        graph.recordings.delete(id)
+                        snackbar.show(
+                            message = "Запись удалена", actionLabel = "Отменить", timeoutMs = 5_000,
+                            onAction = { scope.launch { graph.recordings.restore(id) } },
+                        )
+                    } catch (error: Exception) {
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        snackbar.show("Не удалось удалить запись")
+                    }
+                }
+            },
+            onRenameRecording = { renameTarget = it },
+            onCorrectText = { if (correctingId == null) correctionTarget = it },
             onToggleLiveText = viewModel::toggleLiveText,
             onUploadFile = { importLauncher.launch(arrayOf(AUDIO_MIME)) },
             onPause = viewModel::pauseRecording,
             onResume = viewModel::resumeRecording,
             onAddMark = viewModel::addMark,
+            onAddNote = { text, positionMs -> viewModel.addNote(text, positionMs) },
+            onDeleteNote = viewModel::deleteNote,
             onOpenSettings = navigator.openSettings,
             onOpenRecording = navigator.openTranscript,
             onOpenAllRecordings = { navigator.openTab(TopTab.RECORDINGS) },
@@ -133,6 +160,44 @@ fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest
         micAccess = micAccess,
         actions = actions,
     )
+
+    renameTarget?.let { recording ->
+        TextInputDialog(
+            title = "Переименовать запись",
+            label = "Название",
+            initialValue = recording.title,
+            onConfirm = { title ->
+                renameTarget = null
+                scope.launch {
+                    try { graph.recordings.rename(recording.id, title) }
+                    catch (error: kotlinx.coroutines.CancellationException) { throw error }
+                    catch (error: Exception) { snackbar.show(error.message ?: "Не удалось переименовать запись") }
+                }
+            },
+            onDismiss = { renameTarget = null },
+        )
+    }
+    correctionTarget?.let { recording ->
+        AlertDialog(
+            onDismissRequest = { correctionTarget = null },
+            title = { Text("Пунктуация и правка") },
+            text = { Text("Текущий текст будет исправлен. Таймкоды и спикеры останутся без изменений.") },
+            confirmButton = { TextButton(onClick = {
+                correctionTarget = null
+                correctingId = recording.id
+                scope.launch {
+                    snackbar.show(message = "Пунктуация и правка запущены")
+                    try {
+                        graph.processing.correctText(recording.id)
+                        snackbar.show(message = "Текст обновлён")
+                    } catch (error: kotlinx.coroutines.CancellationException) { throw error }
+                    catch (error: Exception) { snackbar.show(message = error.message ?: "Не удалось исправить текст") }
+                    finally { correctingId = null }
+                }
+            }) { Text("Продолжить") } },
+            dismissButton = { TextButton(onClick = { correctionTarget = null }) { Text("Отмена") } },
+        )
+    }
 }
 
 private const val AUDIO_MIME = "audio/*"

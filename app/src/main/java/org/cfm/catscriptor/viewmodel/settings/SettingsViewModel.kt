@@ -45,4 +45,6 @@ class SettingsViewModel(
     fun onExportFormatChange(format: ExportFormat) = repository.update { it.copy(defaultExportFormat = format) }
 
     fun onLiveTextChange(enabled: Boolean) = repository.update { it.copy(liveTextEnabled = enabled) }
+
+    fun setTextCorrectionEnabled(enabled: Boolean) = repository.update { it.copy(textCorrectionEnabled = enabled) }
 }

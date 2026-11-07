@@ -27,6 +27,34 @@ import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class RecordingFileProviderTest {
+    @Test fun cancelRealMicrophoneReleasesAndDeletesWithoutImport() = runBlocking {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("recordMicrophone") == "true")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        assumeTrue(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+        ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)).use {
+            val storage = AndroidRecordingStorage(context)
+            var file: File? = null
+            val ownStorage = object : RecordingStorage {
+                override fun availableBytes() = storage.availableBytes()
+                override fun create() = storage.create().also { file = it }
+                override fun uri(file: File) = storage.uri(file)
+            }
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            val controller = RecordingController({ true }, { AndroidRecordingDevice(context) }, ownStorage,
+                SystemClock::elapsedRealtime, { _, _ -> error("Отмена не должна импортировать аудио") }, scope)
+            try {
+                assertEquals(StartRecordingResult.Started, controller.start(true))
+                delay(700)
+                controller.pause()
+                controller.cancel()
+                controller.cancel()
+                assertEquals(RecorderState.Idle, controller.state.value)
+                assertFalse(requireNotNull(file).exists())
+                assertNull(controller.stop())
+            } finally { controller.cancel(); scope.cancel(); file?.delete() }
+        }
+    }
+
     @Test fun stopHandsSavedM4aToRealQueueAndService() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

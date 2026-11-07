@@ -163,4 +163,7 @@
     <string name="settings_live">Запись</string>
     <string name="settings_live_text">Live-текст</string>
     <string name="settings_live_text_body">Показывать черновую расшифровку во время записи</string>
+    <string name="settings_correction">Обработка текста</string>
+    <string name="settings_correction_title">Пунктуация и правка</string>
+    <string name="settings_correction_body">Исправлять текст автоматически после распознавания. Если выключить, правку можно запустить позже через меню записи.</string>
 </resources>

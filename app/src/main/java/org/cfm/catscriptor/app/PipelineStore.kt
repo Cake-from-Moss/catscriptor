@@ -10,7 +10,7 @@ import org.cfm.catscriptor.domain.app.RecordingSummary
 
 /**
  * Запись библиотеки вместе со служебным состоянием очереди подготовки.
- * Хранилище живёт в памяти процесса; постоянная база появится вместе с расшифровками.
+ * Метаданные и результаты сохраняются отдельно от аудио.
  */
 internal data class PipelineEntry(
     val id: String,
@@ -29,6 +29,10 @@ internal data class PipelineEntry(
     val editedTranscript: List<org.cfm.catscriptor.domain.pipeline.Utterance>? = null,
     /** Заданные пользователем имена спикеров (speaker_N → имя). */
     val speakerDisplayNames: Map<String, String> = emptyMap(),
+    val ownedAudioPath: String? = null,
+    val deletedAtEpochMs: Long? = null,
+    val notes: List<org.cfm.catscriptor.domain.app.RecordingNote> = emptyList(),
+    val textCorrected: Boolean = false,
 ) {
     /** Транскрипт для показа: правки пользователя поверх результата пайплайна. */
     fun displayedTranscript(): List<org.cfm.catscriptor.domain.pipeline.Utterance> =
@@ -37,7 +41,7 @@ internal data class PipelineEntry(
     fun toSummary() = RecordingSummary(
         id = id,
         title = title,
-        source = RecordingSource.FILE,
+        source = if (ownedAudioPath == null) RecordingSource.FILE else RecordingSource.MICROPHONE,
         createdAtEpochMs = createdAtEpochMs,
         durationMs = durationMs,
         speakerCount = (displayedTranscript().takeIf { it.isNotEmpty() }
@@ -49,6 +53,7 @@ internal data class PipelineEntry(
         previewText = displayedTranscript().firstOrNull()?.text
             ?: processingState?.asrDraft?.firstOrNull()?.text,
         status = status,
+        textCorrected = textCorrected,
     )
 }
 
@@ -56,19 +61,35 @@ internal data class PipelineEntry(
  * Потоки отсюда подписываются UI; все изменения идут копиями LinkedHashMap,
  * чтобы StateFlow замечал обновления. Порядок вставки — порядок очереди.
  */
-internal class PipelineStore {
-    private val state = MutableStateFlow(LinkedHashMap<String, PipelineEntry>())
+internal class PipelineStore(private val disk: PipelineLibraryDisk? = null) {
+    private val state = MutableStateFlow(disk?.load() ?: LinkedHashMap<String, PipelineEntry>())
 
     val entries: StateFlow<LinkedHashMap<String, PipelineEntry>> = state.asStateFlow()
 
-    fun upsert(entry: PipelineEntry) = state.update { LinkedHashMap(it).apply { put(entry.id, entry) } }
+    @Synchronized
+    fun upsert(entry: PipelineEntry) = publish(LinkedHashMap(state.value).apply { put(entry.id, entry) })
 
-    fun update(id: String, transform: (PipelineEntry) -> PipelineEntry) = state.update { map ->
-        if (map.containsKey(id)) LinkedHashMap(map).apply { put(id, transform(getValue(id))) } else map
+    @Synchronized
+    fun update(id: String, transform: (PipelineEntry) -> PipelineEntry) {
+        val previous = state.value[id] ?: return
+        val next = transform(previous)
+        val checkpoint = previous.copy(processingState = next.processingState, status = next.status,
+            durationMs = next.durationMs) != next ||
+            previous.status::class != next.status::class ||
+            previous.processingState?.stage != next.processingState?.stage ||
+            previous.processingState?.transcript != next.processingState?.transcript
+        publish(LinkedHashMap(state.value).apply { put(id, next) }, checkpoint)
     }
 
-    fun remove(id: String) = state.update { map ->
-        if (map.containsKey(id)) LinkedHashMap(map).apply { remove(id) } else map
+    @Synchronized
+    fun remove(id: String) {
+        if (state.value.containsKey(id)) publish(LinkedHashMap(state.value).apply { remove(id) })
+    }
+
+    private fun publish(next: LinkedHashMap<String, PipelineEntry>, checkpoint: Boolean = true) {
+        // Сначала надёжная запись; при ошибке старое состояние остаётся видимым.
+        if (checkpoint) disk?.save(next)
+        state.value = next
     }
 
     fun entry(id: String): PipelineEntry? = state.value[id]

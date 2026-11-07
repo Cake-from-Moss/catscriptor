@@ -34,6 +34,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BuildHomeUiStateTest {
+    @Test fun notesAreAvailableWithLiveEnabledAndDisabled() {
+        val notes = listOf(org.cfm.catscriptor.domain.app.RecordingNote("note", 100, "Важно"))
+        val active = RecorderState.Active(200, false, -30f, -20f, true,
+            listOf(100), emptyList(), notes = notes)
+        assertEquals(notes, build(recorderState = active, live = true).recording?.notes)
+        assertEquals(notes, build(recorderState = active, live = false).recording?.notes)
+    }
+
     private fun build(
         recorderState: RecorderState = RecorderState.Idle,
         live: Boolean = true,
@@ -300,6 +308,8 @@ private class FakeRecordings : RecordingRepository {
     override suspend fun renameSpeaker(recordingId: String, speakerId: String, displayName: String) = Unit
     override suspend fun editLineText(recordingId: String, lineId: String, text: String) = Unit
     override suspend fun changeLineSpeaker(recordingId: String, lineId: String, speakerId: String) = Unit
+    override suspend fun saveNote(recordingId: String, noteId: String?, positionMs: Long, text: String) = Unit
+    override suspend fun deleteNote(recordingId: String, noteId: String) = Unit
 }
 
 private class FakeProcessing : ProcessingController {
@@ -317,10 +327,12 @@ private class FakeProcessing : ProcessingController {
         cancelled += recordingId
     }
     override suspend fun retry(recordingId: String) = Unit
+    override suspend fun correctText(recordingId: String) = Unit
     override suspend fun skipStage(recordingId: String, stage: ProcessingStage) = Unit
 }
 
 private class FakeRecorder : RecorderController {
+    override suspend fun cancel() { state.value = RecorderState.Idle }
     override val isAvailable = true
     override val state = MutableStateFlow<RecorderState>(RecorderState.Idle)
     var startResult: StartRecordingResult = StartRecordingResult.Started
@@ -341,4 +353,6 @@ private class FakeRecorder : RecorderController {
         liveChanges += enabled
     }
     override fun addMark() = Unit
+    override fun addNote(text: String, positionMs: Long?) = Unit
+    override fun deleteNote(noteId: String) = Unit
 }

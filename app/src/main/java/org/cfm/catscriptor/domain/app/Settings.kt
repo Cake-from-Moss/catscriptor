@@ -8,6 +8,7 @@ data class AppSettings(
     val speakerCount: Int? = null,
     val defaultExportFormat: ExportFormat = ExportFormat.JSON,
     val liveTextEnabled: Boolean = true,
+    val textCorrectionEnabled: Boolean = true,
 )
 
 interface SettingsRepository {

@@ -60,6 +60,9 @@ interface ProcessingController {
     suspend fun cancel(recordingId: String)
     suspend fun retry(recordingId: String)
 
+    /** Только локальная пунктуация и правка сохранённого текста, без повторного ASR. */
+    suspend fun correctText(recordingId: String)
+
     /** «Сохранить без этого этапа», например без пунктуации. */
     suspend fun skipStage(recordingId: String, stage: ProcessingStage)
 }

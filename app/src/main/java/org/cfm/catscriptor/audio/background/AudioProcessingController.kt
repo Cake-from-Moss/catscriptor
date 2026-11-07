@@ -33,7 +33,7 @@ object AudioProcessingController {
      * [speakerCount] — число спикеров из настроек на момент запуска; null — автоопределение.
      */
     @Synchronized
-    fun start(context: Context, input: AudioInput, speakerCount: Int? = null) {
+    fun start(context: Context, input: AudioInput, speakerCount: Int? = null, textCorrectionEnabled: Boolean = true) {
         if (mutableState.value.phase == AudioProcessingPhase.RUNNING) return
         publish(AudioProcessingState(AudioProcessingPhase.RUNNING, message = "Подготовка аудио…"))
         try {
@@ -41,6 +41,7 @@ object AudioProcessingController {
             context.startForegroundService(Intent(context, AudioProcessingService::class.java).apply {
                 action = AudioProcessingService.ACTION_START
                 data = Uri.parse(input.documentId)
+                putExtra(AudioProcessingService.EXTRA_TEXT_CORRECTION_ENABLED, textCorrectionEnabled)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 if (speakerCount != null) putExtra(AudioProcessingService.EXTRA_SPEAKER_COUNT, speakerCount)
             })
@@ -59,6 +60,21 @@ object AudioProcessingController {
         } catch (error: Exception) {
             logProcessingError("Не удалось доставить отмену сервису", error)
             // Не объявляем отмену завершённой, пока сервис ещё может владеть PCM.
+        }
+    }
+
+    /** Текст остаётся внутри процесса: большие транскрипты не передаются через Binder. */
+    @Synchronized
+    internal fun startCorrection(context: Context, seed: AudioProcessingState) {
+        check(mutableState.value.phase != AudioProcessingPhase.RUNNING) { "Дождитесь завершения текущей обработки" }
+        publish(seed.copy(phase = AudioProcessingPhase.RUNNING,
+            stage = org.cfm.catscriptor.domain.app.ProcessingStage.CORRECT_TEXT))
+        try {
+            context.startForegroundService(Intent(context, AudioProcessingService::class.java)
+                .setAction(AudioProcessingService.ACTION_CORRECT_TEXT))
+        } catch (error: Exception) {
+            logProcessingError("Не удалось запустить коррекцию", error)
+            publish(seed.copy(phase = AudioProcessingPhase.FAILED, message = "Не удалось запустить пунктуацию и правку"))
         }
     }
 

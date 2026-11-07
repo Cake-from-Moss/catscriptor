@@ -26,7 +26,7 @@ data class HomeUiState(
     val content: HomeContent = HomeContent.Overview(),
 )
 
-data class RecordingUi(val paused: Boolean)
+data class RecordingUi(val paused: Boolean, val notes: List<org.cfm.catscriptor.domain.app.RecordingNote> = emptyList())
 
 data class ModelsIssue(val details: String?)
 
@@ -43,7 +43,7 @@ sealed interface HomeContent {
     /** После «Стоп» или импорта: этапы обработки и «Уже распознано». */
     data class ProcessingDetail(val job: ProcessingJob) : HomeContent
 
-    data class LiveFeed(val lines: List<LiveLine>) : HomeContent
+    data class LiveFeed(val lines: List<LiveLine>, val status: String = "", val recognizing: Boolean = false) : HomeContent
 
     data class RecordingWithoutLive(val marksMs: List<Long>) : HomeContent
 }
@@ -82,7 +82,7 @@ fun buildHomeUiState(
         null
     }
     val content = when {
-        active != null && liveTextEnabled -> HomeContent.LiveFeed(active.liveLines)
+        active != null && liveTextEnabled -> HomeContent.LiveFeed(active.liveLines, active.liveStatus, active.liveRecognizing)
         active != null -> HomeContent.RecordingWithoutLive(active.marksMs)
         focusedJob != null -> HomeContent.ProcessingDetail(focusedJob)
         else -> {
@@ -104,7 +104,7 @@ fun buildHomeUiState(
     return HomeUiState(
         recorderAvailable = recorderAvailable,
         liveTextEnabled = liveTextEnabled,
-        recording = active?.let { RecordingUi(paused = it.paused) },
+        recording = active?.let { RecordingUi(paused = it.paused, notes = it.notes) },
         queueBusy = jobs.isNotEmpty(),
         modelsIssue = modelsIssue,
         content = content,

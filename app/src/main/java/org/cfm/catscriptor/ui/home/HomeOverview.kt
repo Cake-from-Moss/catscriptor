@@ -25,8 +25,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import org.cfm.catscriptor.ui.components.SwipeToRevealDelete
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +67,9 @@ internal fun HomeOverview(
     onExpandJob: (String) -> Unit,
     onOpenRecording: (String) -> Unit,
     onOpenAllRecordings: () -> Unit,
+    onDeleteRecording: (String) -> Unit = {},
+    onRenameRecording: (RecordingSummary) -> Unit = {},
+    onCorrectText: (RecordingSummary) -> Unit = {},
 ) {
     LazyColumn(contentPadding = contentPadding, modifier = Modifier.fillMaxWidth()) {
         if (content.showModelsIssue) {
@@ -69,11 +80,13 @@ internal fun HomeOverview(
         if (content.jobs.isNotEmpty()) {
             item(key = "jobsHeader") { SectionLabel(stringResource(R.string.home_in_processing)) }
             items(content.jobs, key = { "job:${it.recordingId}" }) { job ->
+                SwipeToRevealDelete(onDelete = { onDeleteRecording(job.recordingId) }, modifier = Modifier.animateItem()) {
                 CompactJobCard(
                     job = job,
                     onClick = { onExpandJob(job.recordingId) },
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
+                }
             }
         }
         if (content.recents.isNotEmpty()) {
@@ -99,7 +112,17 @@ internal fun HomeOverview(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     content.recents.forEach { summary ->
-                        RecentRow(summary = summary, onClick = { onOpenRecording(summary.id) })
+                        key(summary.id) {
+                        SwipeToRevealDelete(onDelete = { onDeleteRecording(summary.id) }, onRename = { onRenameRecording(summary) }) {
+                        RecentRow(
+                            summary = summary,
+                            onClick = { onOpenRecording(summary.id) },
+                            onRename = { onRenameRecording(summary) },
+                            onCorrect = { onCorrectText(summary) },
+                            onDelete = { onDeleteRecording(summary.id) },
+                        )
+                        }
+                        }
                     }
                 }
             }
@@ -186,7 +209,8 @@ internal fun ProgressLine(progress: () -> Float, modifier: Modifier = Modifier) 
 }
 
 @Composable
-private fun RecentRow(summary: RecordingSummary, onClick: () -> Unit) {
+private fun RecentRow(summary: RecordingSummary, onClick: () -> Unit, onRename: () -> Unit, onCorrect: () -> Unit, onDelete: () -> Unit) {
+    var menuExpanded by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     val preview = summary.previewText?.takeIf { it.isNotBlank() }?.let { text ->
         val speaker = summary.previewSpeakerName
@@ -251,6 +275,30 @@ private fun RecentRow(summary: RecordingSummary, onClick: () -> Unit) {
         }
         Spacer(Modifier.width(12.dp))
         Text(formatTimecode(summary.durationMs), style = StenografType.timecode, color = colors.onSurfaceVariant)
+        Box {
+            IconButton(onClick = { menuExpanded = true }) {
+                Icon(AppIcons.More, contentDescription = stringResource(R.string.recordings_more, summary.title), tint = colors.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.recordings_menu_rename)) },
+                    leadingIcon = { Icon(AppIcons.Edit, contentDescription = null) },
+                    onClick = { menuExpanded = false; onRename() },
+                )
+                if ((summary.status == RecordingStatus.Ready || summary.status == RecordingStatus.AsrReady) && !summary.textCorrected) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.recordings_menu_correct)) },
+                        leadingIcon = { Icon(AppIcons.Edit, contentDescription = null) },
+                        onClick = { menuExpanded = false; onCorrect() },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.recordings_menu_delete)) },
+                    leadingIcon = { Icon(AppIcons.Delete, contentDescription = null) },
+                    onClick = { menuExpanded = false; onDelete() },
+                )
+            }
+        }
     }
 }
 

@@ -20,6 +20,7 @@ fun SettingsRoute(graph: AppGraph, navigator: AppNavigator) {
             onSpeakerCountChange = viewModel::onSpeakerCountChange,
             onExportFormatChange = viewModel::onExportFormatChange,
             onLiveTextChange = viewModel::onLiveTextChange,
+            onTextCorrectionChange = viewModel::setTextCorrectionEnabled,
         )
     }
     SettingsScreen(state = state, actions = actions)

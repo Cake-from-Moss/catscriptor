@@ -6,8 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -39,14 +36,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.cfm.catscriptor.R
-import org.cfm.catscriptor.ui.components.AppIcons
 import org.cfm.catscriptor.ui.components.formatTimecode
 import org.cfm.catscriptor.ui.theme.StenografShapes
 import org.cfm.catscriptor.ui.theme.StenografType
@@ -55,15 +50,12 @@ import org.cfm.catscriptor.viewmodel.home.LevelReading
 import org.cfm.catscriptor.viewmodel.home.LevelStatus
 import org.cfm.catscriptor.viewmodel.home.RecorderSignal
 
-/** Запись без Live-текста: крупный таймер, индикатор уровня, отметки и подсказка. */
-@OptIn(ExperimentalLayoutApi::class)
+/** Запись без Live-текста: крупный таймер, индикатор уровня и подсказка. */
 @Composable
 internal fun RecordingPanel(
-    marksMs: List<Long>,
     paused: Boolean,
     signal: () -> RecorderSignal?,
     contentPadding: PaddingValues,
-    onAddMark: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     LazyColumn(
@@ -88,44 +80,6 @@ internal fun RecordingPanel(
         }
         item(key = "timer") { LargeTimer(signal = signal, paused = paused) }
         item(key = "meter") { LevelMeterBlock(signal = signal, paused = paused) }
-        item(key = "mark") {
-            FilledTonalButton(
-                onClick = onAddMark,
-                enabled = !paused,
-                modifier = Modifier.padding(top = 24.dp).height(48.dp),
-            ) {
-                Icon(AppIcons.Bookmark, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.home_add_mark), style = StenografType.label)
-            }
-        }
-        if (marksMs.isNotEmpty()) {
-            item(key = "marks") {
-                Column(Modifier.fillMaxWidth().padding(top = 16.dp)) {
-                    Text(
-                        stringResource(R.string.home_marks),
-                        style = StenografType.label,
-                        color = colors.onSurface,
-                        modifier = Modifier.padding(bottom = 8.dp).semantics { heading() },
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        marksMs.forEach { mark ->
-                            Text(
-                                formatTimecode(mark),
-                                style = StenografType.timecode,
-                                color = colors.onSurfaceVariant,
-                                modifier = Modifier
-                                    .border(1.dp, colors.outline, StenografShapes.Pill)
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
         item(key = "hint") {
             Surface(
                 shape = StenografShapes.Card,

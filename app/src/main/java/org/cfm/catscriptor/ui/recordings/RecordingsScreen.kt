@@ -63,6 +63,7 @@ import org.cfm.catscriptor.domain.app.RecordingSource
 import org.cfm.catscriptor.domain.app.RecordingStatus
 import org.cfm.catscriptor.domain.app.RecordingSummary
 import org.cfm.catscriptor.ui.components.AppIcons
+import org.cfm.catscriptor.ui.components.SwipeToRevealDelete
 import org.cfm.catscriptor.ui.components.formatTimecode
 import org.cfm.catscriptor.ui.theme.StenografDimens
 import org.cfm.catscriptor.ui.theme.StenografShapes
@@ -74,6 +75,7 @@ import org.cfm.catscriptor.viewmodel.recordings.RecordingsUiState
 class RecordingRowActions(
     val onOpen: (RecordingSummary) -> Unit,
     val onRename: (RecordingSummary) -> Unit,
+    val onCorrect: (RecordingSummary) -> Unit = {},
     val onExport: (RecordingSummary) -> Unit,
     val onDelete: (RecordingSummary) -> Unit,
 )
@@ -154,12 +156,13 @@ fun RecordingsScreen(
                     )
                 }
                 items(group.items, key = { it.id }, contentType = { "row" }) { summary ->
+                    SwipeToRevealDelete(onDelete = { rowActions.onDelete(summary) }, onRename = { rowActions.onRename(summary) }, modifier = Modifier.animateItem()) {
                     RecordingRow(
                         summary = summary,
                         groupKey = group.key,
                         actions = rowActions,
-                        modifier = Modifier.animateItem(),
                     )
+                    }
                 }
             }
         }
@@ -362,6 +365,13 @@ private fun RowMenu(summary: RecordingSummary, actions: RecordingRowActions) {
                 leadingIcon = { Icon(AppIcons.Edit, contentDescription = null) },
                 onClick = { expanded = false; actions.onRename(summary) },
             )
+            if ((summary.status == RecordingStatus.Ready || summary.status == RecordingStatus.AsrReady) && !summary.textCorrected) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.recordings_menu_correct)) },
+                    leadingIcon = { Icon(AppIcons.Edit, contentDescription = null) },
+                    onClick = { expanded = false; actions.onCorrect(summary) },
+                )
+            }
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.recordings_menu_export)) },
                 leadingIcon = { Icon(AppIcons.Share, contentDescription = null) },

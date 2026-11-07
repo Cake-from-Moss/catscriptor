@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,8 +35,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -43,16 +44,23 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -108,6 +116,9 @@ class TranscriptActions(
     val onLineLongPress: (TranscriptLine) -> Unit,
     val onUserScroll: () -> Unit,
     val onReturnToCurrent: () -> Unit,
+    val onSaveNote: (String?, Long, String) -> Unit = { _, _, _ -> },
+    val onDeleteNote: (String) -> Unit = {},
+    val onCorrectText: () -> Unit = {},
     val player: PlayerActions,
 )
 
@@ -123,6 +134,12 @@ fun TranscriptScreen(
     listState: LazyListState = rememberLazyListState(),
 ) {
     val document = state.document
+    var noteDialogOpen by rememberSaveable { mutableStateOf(false) }
+    var editingNoteId by rememberSaveable { mutableStateOf<String?>(null) }
+    var noteText by rememberSaveable { mutableStateOf("") }
+    var notePositionMs by rememberSaveable { mutableLongStateOf(0L) }
+    var correctionConfirm by rememberSaveable { mutableStateOf(false) }
+    var transcriptMenuExpanded by rememberSaveable { mutableStateOf(false) }
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         TopBar(
             document = document,
@@ -132,7 +149,19 @@ fun TranscriptScreen(
             matchCount = state.search.matchIds.size,
             focusedMatch = state.search.focusedIndex,
             actions = actions,
+            onCorrect = { correctionConfirm = true },
+            menuExpanded = transcriptMenuExpanded,
+            onMenuExpandedChange = { transcriptMenuExpanded = it },
         )
+        if (correctionConfirm) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { correctionConfirm = false },
+                title = { Text("Пунктуация и правка") },
+                text = { Text("Текущий текст будет исправлен. Таймкоды и спикеры останутся без изменений.") },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = { correctionConfirm = false; actions.onCorrectText() }) { Text("Продолжить") } },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = { correctionConfirm = false }) { Text("Отмена") } },
+            )
+        }
         when {
             state.loading -> Spacer(Modifier.weight(1f))
             document == null -> MessageState(
@@ -178,6 +207,23 @@ fun TranscriptScreen(
                     }
                 }
                 if (draft == null) {
+                    TranscriptNotes(
+                        notes = document.notes,
+                        onAdd = {
+                            editingNoteId = null
+                            notePositionMs = state.playback.positionMs
+                            noteText = ""
+                            noteDialogOpen = true
+                        },
+                        onSeek = actions.player.onSeek,
+                        onEdit = { note ->
+                            editingNoteId = note.id
+                            notePositionMs = note.positionMs
+                            noteText = note.text
+                            noteDialogOpen = true
+                        },
+                        onDelete = actions.onDeleteNote,
+                    )
                     val segments = remember(document.lines, state.playback.durationMs) {
                         trackSegments(document.lines, state.playback.durationMs)
                     }
@@ -191,6 +237,35 @@ fun TranscriptScreen(
             }
         }
     }
+    if (noteDialogOpen) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { noteDialogOpen = false },
+            title = { Text(if (editingNoteId == null) "Добавить пометку" else "Изменить пометку") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Время ${formatTimecode(notePositionMs)}", style = StenografType.timecode, color = MaterialTheme.colorScheme.primary)
+                    Text("Пустой текст сохранится как отметка времени.", style = StenografType.meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(
+                        value = noteText,
+                        onValueChange = { noteText = it.take(2000) },
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 140.dp),
+                        label = { Text("Текст пометки") },
+                        supportingText = { Text("До 2000 символов") },
+                        maxLines = 4,
+                    )
+                }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { noteDialogOpen = false }) { Text("Отмена") } },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        actions.onSaveNote(editingNoteId, notePositionMs, noteText.trim())
+                        noteDialogOpen = false
+                    },
+                ) { Text("Сохранить") }
+            },
+        )
+    }
 }
 
 @Composable
@@ -202,6 +277,9 @@ private fun TopBar(
     matchCount: Int,
     focusedMatch: Int,
     actions: TranscriptActions,
+    onCorrect: () -> Unit,
+    menuExpanded: Boolean,
+    onMenuExpandedChange: (Boolean) -> Unit,
 ) {
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Row(
@@ -246,6 +324,20 @@ private fun TopBar(
                         }
                     }
                     if (document != null && !draft) {
+                        if (!document.textCorrected) {
+                            Box {
+                                IconButton(onClick = { onMenuExpandedChange(true) }) {
+                                    Icon(AppIcons.More, contentDescription = stringResource(R.string.recordings_more, document.title))
+                                }
+                                DropdownMenu(expanded = menuExpanded, onDismissRequest = { onMenuExpandedChange(false) }) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.recordings_menu_correct)) },
+                                        leadingIcon = { Icon(AppIcons.Edit, contentDescription = null) },
+                                        onClick = { onMenuExpandedChange(false); onCorrect() },
+                                    )
+                                }
+                            }
+                        }
                         IconButton(onClick = actions.onSearchOpen) {
                             Icon(AppIcons.Search, contentDescription = stringResource(R.string.transcript_search))
                         }

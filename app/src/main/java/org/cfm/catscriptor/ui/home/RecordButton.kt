@@ -169,11 +169,19 @@ fun RecordButton(
             label = "recordIcon",
         ) { isRecording ->
             if (isRecording) {
-                Box(
-                    Modifier
-                        .size(22.dp)
-                        .background(colors.primary, RoundedCornerShape(7.dp)),
-                )
+                androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        Modifier
+                            .size(19.dp)
+                            .background(colors.primary, RoundedCornerShape(6.dp)),
+                    )
+                    androidx.compose.material3.Text(
+                        "Стоп",
+                        color = colors.primary,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    )
+                }
             } else {
                 Icon(
                     AppIcons.Mic,
