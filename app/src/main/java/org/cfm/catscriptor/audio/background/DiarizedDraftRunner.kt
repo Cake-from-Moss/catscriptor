@@ -89,7 +89,9 @@ internal class DiarizedDraftRunner(
                 )
 
                 // Финал: локальная LLM правит только текст, спикеров и таймкоды не трогает (#7).
-                emit(ProcessingStage.CORRECT_TEXT)
+                // processedMs = 0, как у ASR: иначе прогресс этапа считался бы половиной веса,
+                // а после первой реплики откатывался назад.
+                emit(ProcessingStage.CORRECT_TEXT, 0)
                 val corrected = ArrayList<Utterance>(transcript.transcript.size)
                 if (transcript.transcript.isNotEmpty()) {
                     correctorFactory().use { corrector ->

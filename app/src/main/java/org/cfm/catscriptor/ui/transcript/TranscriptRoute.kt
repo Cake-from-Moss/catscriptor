@@ -4,7 +4,7 @@ import android.content.ClipData
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,10 +37,9 @@ fun TranscriptRoute(graph: AppGraph, navigator: AppNavigator, recordingId: Strin
     val scope = rememberCoroutineScope()
     val copiedMessage = stringResource(R.string.transcript_copied)
 
-    DisposableEffect(viewModel) {
-        viewModel.onEnter()
-        onDispose { viewModel.onLeave() }
-    }
+    // Освобождение плеера — в TranscriptViewModel.onCleared: при повороте экран уходит из композиции,
+    // но воспроизведение должно продолжиться.
+    LaunchedEffect(viewModel) { viewModel.onEnter() }
 
     // Назад сначала закрывает поиск, и только потом экран.
     BackHandler(enabled = state.searchOpen, onBack = viewModel::onSearchClose)

@@ -234,7 +234,9 @@ class SpeakerClustering(private val settings: SpeakerClusteringSettings = Speake
     private fun centroid(points: List<DoubleArray>, labels: IntArray, id: Int): DoubleArray {
         val sum = DoubleArray(points[0].size)
         for (i in labels.indices) if (labels[i] == id) for (d in sum.indices) sum[d] += points[i][d]
-        return normalize(sum)
+        // Взаимно гасящиеся эмбеддинги дают нулевую сумму: такой центроид ни на что не похож (косинус 0),
+        // но не должен ронять всю диаризацию.
+        return if (sum.all { it == 0.0 }) sum else normalize(sum)
     }
 
     private fun nearest(point: DoubleArray, centroids: List<DoubleArray>): Int =
