@@ -1,6 +1,6 @@
 # AGENTS.md — catscriptor (Neuro-stenographer)
 
-Reply to the team in Russian. Code, identifiers and comments: English.
+Reply to the team in Russian. Code and identifiers: English. All code comments, including KDoc: Russian.
 
 Nuclear IT Hack (November 2026): Android app that turns audio recordings of conversations into a transcript with speakers and timestamps, **fully on-device**.
 
