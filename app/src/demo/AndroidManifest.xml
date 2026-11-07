@@ -13,15 +13,7 @@
             android:exported="true"
             android:theme="@android:style/Theme.NoDisplay" />
 
-        <!-- Отдаёт share sheet файлы экспорта из кэша; только в демо-сборке. -->
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.exports"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/demo_export_paths" />
-        </provider>
+        <!-- Файлы «Поделиться» отдаёт FileProvider основного манифеста (${applicationId}.recordings,
+             путь cache/exports/): второй провайдер с тем же android:name ломал слияние манифестов. -->
     </application>
 </manifest>

@@ -93,6 +93,6 @@ class DemoExportGateway(private val context: Context, private val store: DemoSto
 
     private companion object {
         const val SHARE_DIR = "exports"
-        const val AUTHORITY_SUFFIX = ".exports"
+        const val AUTHORITY_SUFFIX = ".recordings"
     }
 }
