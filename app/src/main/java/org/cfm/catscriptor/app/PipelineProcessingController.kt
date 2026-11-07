@@ -20,6 +20,8 @@ import org.cfm.catscriptor.audio.background.AudioProcessingState
 import org.cfm.catscriptor.domain.app.ImportResult
 import org.cfm.catscriptor.domain.app.ModelsStatus
 import org.cfm.catscriptor.domain.app.ProcessingController
+import org.cfm.catscriptor.domain.app.ProcessingProgress
+import org.cfm.catscriptor.domain.app.isOptional
 import org.cfm.catscriptor.domain.app.ProcessingJob
 import org.cfm.catscriptor.domain.app.ProcessingStage
 import org.cfm.catscriptor.domain.app.RecordingSource
@@ -31,8 +33,7 @@ import org.cfm.catscriptor.domain.pipeline.PcmAudioSource
 import org.cfm.catscriptor.native.models.BundledModelSpec
 
 /**
- * Очередь реальных PREPARE_AUDIO → VAD → ASR поверх AudioProcessingService.
- * Диаризация и LLM ещё не выполнены: результат остаётся промежуточным черновиком.
+ * Очередь реальных PREPARE_AUDIO → VAD → диаризация → ASR → LLM поверх AudioProcessingService.
  * Все изменения записей идут в одном потоке [dispatcher], чтобы не гнать гонки с сервисом.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -99,9 +100,31 @@ internal class PipelineProcessingController(
         pump()
     }
 
+    /**
+     * «Сохранить без этого этапа» после ошибки необязательного этапа. Сейчас это только
+     * LLM-коррекция: реплики со спикерами и таймкодами уже готовы (runner публикует их до LLM),
+     * поэтому запись становится готовой с исходным текстом ASR без повторного прогона.
+     * Обязательные этапы и записи без готовых реплик не пропускаются.
+     */
     override suspend fun skipStage(recordingId: String, stage: ProcessingStage) = withContext(dispatcher) {
-        // Необязательных этапов пока нет; пропуск появится вместе с пунктуацией/LLM.
-        // TODO(#7): дать DiarizedDraftRunner возможность пропустить необязательный этап (например, LLM-коррекцию) по запросу.
+        if (!stage.isOptional || currentId == recordingId) return@withContext
+        val entry = store.entry(recordingId) ?: return@withContext
+        val failed = entry.status as? RecordingStatus.Failed ?: return@withContext
+        val draft = entry.processingState?.speakerDraft ?: return@withContext
+        if (failed.stage != stage) return@withContext
+        store.update(recordingId) {
+            it.copy(
+                status = RecordingStatus.Ready,
+                prepareFailure = null,
+                processingState = it.processingState?.copy(
+                    phase = AudioProcessingPhase.COMPLETED,
+                    transcript = draft,
+                    stages = it.processingState.stages.map { progress ->
+                        if (progress.stage == stage) progress.copy(status = StageStatus.Skipped) else progress
+                    },
+                ),
+            )
+        }
     }
 
     /** Терминальные фазы сервиса привязываются к текущей записи и запускают следующую в очереди. */
@@ -109,9 +132,13 @@ internal class PipelineProcessingController(
         when (state.phase) {
             AudioProcessingPhase.IDLE -> Unit
             AudioProcessingPhase.RUNNING -> currentId?.let { id ->
+                val durationMs = state.sampleCount * 1000L / PcmAudioSource.SAMPLE_RATE_HZ
                 store.update(id) { it.copy(
-                    status = RecordingStatus.Processing((state.stage.ordinal + 0.5f) / ProcessingStage.entries.size, state.stage),
-                    durationMs = state.sampleCount * 1000L / PcmAudioSource.SAMPLE_RATE_HZ,
+                    status = RecordingStatus.Processing(
+                        ProcessingProgress.fraction(state.stages, durationMs).coerceAtLeast(RUN_FRACTION),
+                        state.stage,
+                    ),
+                    durationMs = durationMs,
                     processingState = state,
                 ) }
             }
@@ -166,7 +193,11 @@ internal class PipelineProcessingController(
         AudioProcessingController.start(appContext, AudioInput(next.documentUri))
     }
 
-    // TODO(#8): считать overallFraction по доле обработанного аудио внутри этапа и оценивать remainingMs.
+    /**
+     * Доля и оставшееся время считает [ProcessingProgress] по этапам сервиса: веса этапов взяты из
+     * замера на телефоне, внутри ASR и LLM учитывается обработанное аудио. Оставшееся время —
+     * экстраполяция по прошедшему времени текущей записи.
+     */
     private fun PipelineEntry.toJob(): ProcessingJob {
         val prepare = when (val current = status) {
             is RecordingStatus.Processing ->
@@ -189,12 +220,13 @@ internal class PipelineProcessingController(
             durationMs = durationMs,
             overallFraction = when (status) {
                 is RecordingStatus.Processing -> status.fraction
-                is RecordingStatus.Failed -> status.stage.ordinal.toFloat() / ProcessingStage.entries.size
+                is RecordingStatus.Failed -> ProcessingProgress.fraction(processingState?.stages.orEmpty(), durationMs)
                 RecordingStatus.Queued -> 0f
-                RecordingStatus.Ready, RecordingStatus.AsrReady -> DONE_FRACTION
+                RecordingStatus.Ready, RecordingStatus.AsrReady -> 1f
             },
             stages = processingState?.stages?.takeIf { it.isNotEmpty() } ?: (listOf(prepare) + rest),
-            remainingMs = null,
+            remainingMs = (status as? RecordingStatus.Processing)
+                ?.let { ProcessingProgress.remainingMs(it.fraction, runningElapsedMs()) },
             partialText = processingState?.partialText.orEmpty(),
         )
     }
@@ -229,7 +261,7 @@ internal class PipelineProcessingController(
     private companion object {
         const val MODEL_MANIFEST = "model-manifest.properties"
         const val LLM_MANIFEST = "llm-manifest.properties"
-        const val RUN_FRACTION = 0.05f
-        const val DONE_FRACTION = 0.2f
+        /** Минимальная доля запущенной записи: полоса прогресса сразу показывает, что работа идёт. */
+        const val RUN_FRACTION = 0.01f
     }
 }

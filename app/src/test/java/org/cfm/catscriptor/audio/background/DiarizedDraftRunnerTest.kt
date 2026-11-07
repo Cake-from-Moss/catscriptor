@@ -161,11 +161,20 @@ class DiarizedDraftRunnerTest {
         assertEquals(listOf("speaker_1"), result.transcript.map { it.speakerId })
     }
 
-    @Test fun draftIsNeverPublishedBeforeMergeAndCorrection() = runBlocking {
+    @Test fun draftIsPublishedOnlyAfterMergeAndTranscriptOnlyAfterCorrection() = runBlocking {
         val fixture = Fixture(listOf(SpeechSegment(TimeRange(0, 5_000))), listOf(spk(1, 0, 5_000)))
         fixture.run()
-        assertTrue(fixture.states.all {
-            (it.speakerDraft == null && it.transcript == null) || it.phase == AudioProcessingPhase.COMPLETED
-        })
+        // Реплики со спикерами появляются только с этапа LLM (после слияния), финальный текст — только в конце.
+        assertTrue(fixture.states.all { it.speakerDraft == null || it.stage == ProcessingStage.CORRECT_TEXT })
+        assertTrue(fixture.states.all { it.transcript == null || it.phase == AudioProcessingPhase.COMPLETED })
+    }
+
+    @Test fun correctionFailureKeepsSpeakerDraftForSkipping() {
+        val fixture = Fixture(listOf(SpeechSegment(TimeRange(0, 5_000))), listOf(spk(1, 0, 5_000)),
+            correctorFailure = IllegalStateException("llm native"))
+        assertThrows(IllegalStateException::class.java) { runBlocking { fixture.run() } }
+        // Без этого «Пропустить этап» после ошибки LLM было бы не из чего собрать.
+        assertEquals(listOf("speaker_1" to "реплика 0"),
+            fixture.states.last().speakerDraft!!.map { it.speakerId to it.text })
     }
 }
