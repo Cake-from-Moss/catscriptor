@@ -146,6 +146,22 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `stop without a recording reports failure but repeated idle stop is silent`() {
+        recorder.state.value = active()
+        viewModel.stopRecording()
+        assertEquals(listOf(HomeEvent.RecordingStopFailed), events)
+        viewModel.stopRecording()
+        assertEquals(listOf(HomeEvent.RecordingStopFailed), events)
+    }
+
+    @Test
+    fun `unexpected active to idle transition reports recording failure`() {
+        recorder.state.value = active()
+        recorder.state.value = RecorderState.Idle
+        assertEquals(listOf(HomeEvent.RecordingStopFailed), events)
+    }
+
+    @Test
     fun `import results map to details or snackbar events`() {
         processing.jobs.value = listOf(job("imp"))
         processing.importResult = ImportResult.Accepted("imp")
@@ -315,7 +331,10 @@ private class FakeRecorder : RecorderController {
         startedWithLive += liveText
         return startResult
     }
-    override suspend fun stop(): String? = stopResult
+    override suspend fun stop(): String? {
+        state.value = RecorderState.Idle
+        return stopResult
+    }
     override fun pause() = Unit
     override fun resume() = Unit
     override fun setLiveText(enabled: Boolean) {

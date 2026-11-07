@@ -141,7 +141,8 @@ internal fun RecordingPanel(
                     )
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        stringResource(R.string.home_no_live_hint),
+                        stringResource(R.string.home_no_live_hint) + " · " +
+                            stringResource(R.string.home_recording_foreground_hint),
                         style = StenografType.meta,
                         color = colors.onSurfaceVariant,
                     )
