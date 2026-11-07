@@ -15,9 +15,9 @@ sealed interface RecorderState {
     data object Idle : RecorderState
 
     /**
-     * [levelDbfs] обновляется примерно 10 раз в секунду, это мгновенный уровень буфера;
+     * [levelDbfs] обновляется примерно 10 раз в секунду: у MediaRecorder это пик, не RMS;
      * сглаживание индикатора делает UI. [peakDbfs] нужен для распознавания клиппинга.
-     * [speechDetected] — сигнал VAD; из него UI выводит подпись «Тишина».
+     * [speechDetected] — сигнал VAD; без VAD всегда true, чтобы не имитировать «Тишину».
      */
     data class Active(
         val elapsedMs: Long,

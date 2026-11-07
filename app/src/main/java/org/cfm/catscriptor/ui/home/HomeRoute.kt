@@ -60,6 +60,7 @@ fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest
                 is HomeEvent.LowStorage ->
                     snackbar.show(resources.getString(R.string.home_low_storage, event.minutesAvailable))
                 HomeEvent.RecordingUnavailable -> snackbar.show(resources.getString(R.string.home_recording_unavailable))
+                HomeEvent.RecordingStopFailed -> snackbar.show(resources.getString(R.string.home_recording_stop_failed))
                 HomeEvent.ImportUnsupported -> snackbar.show(resources.getString(R.string.home_import_unsupported))
                 HomeEvent.ImportModelsUnavailable ->
                     snackbar.show(resources.getString(R.string.home_import_models_unavailable))

@@ -66,9 +66,9 @@
     <string name="home_expand_processing">Показать этапы обработки</string>
 
     <!-- Live-текст -->
-    <string name="home_live_header">Live-расшифровка</string>
+    <string name="home_live_header">Текст записи</string>
     <string name="home_live_draft">черновик</string>
-    <string name="home_live_waiting">Говорите: текст появится здесь</string>
+    <string name="home_live_waiting">Текст появится после остановки записи · оставайтесь в приложении</string>
     <string name="home_jump_to_latest">К новому</string>
 
     <!-- Запись без Live-текста -->
@@ -76,7 +76,8 @@
     <string name="home_recording_on_pause">Пауза · микрофон телефона</string>
     <string name="home_add_mark">Отметить момент</string>
     <string name="home_marks">Отметки</string>
-    <string name="home_no_live_hint">Расшифровка начнётся сразу после остановки. Включите «Live-текст», чтобы видеть текст во время записи.</string>
+    <string name="home_no_live_hint">Расшифровка начнётся после остановки записи</string>
+    <string name="home_recording_foreground_hint">Оставайтесь в приложении, пока идёт запись</string>
     <string name="home_level_normal">Уровень сигнала в норме</string>
     <string name="home_level_too_quiet">Слишком тихо, поднесите телефон ближе</string>
     <string name="home_level_silence">Тишина</string>
@@ -103,6 +104,7 @@
     <string name="home_import_unsupported">Не удалось открыть файл: формат не поддерживается</string>
     <string name="home_import_models_unavailable">Файл не обработать: модели распознавания недоступны</string>
     <string name="home_recording_interrupted">Запись приостановлена</string>
+    <string name="home_recording_stop_failed">Запись прервана или не передана на обработку</string>
     <string name="home_models_unavailable">Модели распознавания недоступны</string>
     <string name="home_models_unavailable_body">Запись работает, а обработка начнётся, когда модели появятся.</string>
     <string name="home_details">Подробнее</string>

@@ -30,6 +30,7 @@ import org.cfm.catscriptor.domain.app.StartRecordingResult
 sealed interface HomeEvent {
     data class LowStorage(val minutesAvailable: Int) : HomeEvent
     data object RecordingUnavailable : HomeEvent
+    data object RecordingStopFailed : HomeEvent
     data object ImportUnsupported : HomeEvent
     data object ImportModelsUnavailable : HomeEvent
 
@@ -52,6 +53,8 @@ class HomeViewModel(
     private val focus = MutableStateFlow(DetailFocus())
     private val eventChannel = Channel<HomeEvent>(Channel.BUFFERED)
     private var handledDetailsRequest = 0
+    private var stoppingRecording = false
+    private var suppressStopTransition = false
 
     val events: Flow<HomeEvent> = eventChannel.receiveAsFlow()
 
@@ -93,7 +96,14 @@ class HomeViewModel(
     init {
         viewModelScope.launch {
             var wasInterrupted = false
+            var wasRecording = recorder.state.value is RecorderState.Active
             recorder.state.collect { state ->
+                val recording = state is RecorderState.Active
+                if (wasRecording && !recording) {
+                    if (suppressStopTransition) suppressStopTransition = false
+                    else eventChannel.send(HomeEvent.RecordingStopFailed)
+                }
+                wasRecording = recording
                 val interrupted = (state as? RecorderState.Active)?.pausedByInterruption == true
                 if (interrupted && !wasInterrupted) eventChannel.send(HomeEvent.RecordingInterrupted)
                 wasInterrupted = interrupted
@@ -114,7 +124,17 @@ class HomeViewModel(
 
     fun stopRecording() {
         viewModelScope.launch {
-            recorder.stop()?.let(::showDetails)
+            if (stoppingRecording || recorder.state.value !is RecorderState.Active) return@launch
+            stoppingRecording = true
+            suppressStopTransition = true
+            try {
+                val recordingId = recorder.stop()
+                if (recordingId != null) showDetails(recordingId)
+                else eventChannel.send(HomeEvent.RecordingStopFailed)
+            } finally {
+                if (recorder.state.value is RecorderState.Active) suppressStopTransition = false
+                stoppingRecording = false
+            }
         }
     }
 
