@@ -1,0 +1,64 @@
+package org.cfm.catscriptor.domain.app
+
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+
+/** Порядок совпадает с конвейером из AGENTS.md и DESIGN.md §5.3. */
+enum class ProcessingStage { PREPARE_AUDIO, DETECT_SPEECH, TRANSCRIBE, DIARIZE, CORRECT_TEXT }
+
+sealed interface StageStatus {
+    data object Pending : StageStatus
+
+    /** [processedMs] заполняется только для этапа распознавания: «8:10 из 12:41». */
+    data class Running(val elapsedMs: Long, val processedMs: Long? = null) : StageStatus
+    data class Done(val elapsedMs: Long) : StageStatus
+    data class Failed(val message: String?) : StageStatus
+    data object Skipped : StageStatus
+}
+
+data class StageProgress(val stage: ProcessingStage, val status: StageStatus)
+
+/**
+ * Снимок обработки одной записи. Должен приходить из Foreground Service (#8).
+ * [partialText] — уже распознанный текст для блока «Уже распознано».
+ */
+data class ProcessingJob(
+    val recordingId: String,
+    val title: String,
+    val source: RecordingSource,
+    val fileExtension: String?,
+    val durationMs: Long,
+    val overallFraction: Float,
+    val stages: List<StageProgress>,
+    val remainingMs: Long?,
+    val partialText: String,
+)
+
+sealed interface ModelsStatus {
+    data object Ready : ModelsStatus
+
+    /** Модели отсутствуют или повреждены: запись разрешена, обработка нет (§7). */
+    data class Unavailable(val details: String?) : ModelsStatus
+}
+
+sealed interface ImportResult {
+    data class Accepted(val recordingId: String) : ImportResult
+    data object UnsupportedFormat : ImportResult
+    data object ModelsUnavailable : ImportResult
+}
+
+/** Очередь обработки. Реальная реализация запускает Foreground Service и пайплайн. */
+interface ProcessingController {
+    val modelsStatus: StateFlow<ModelsStatus>
+
+    /** Задачи в порядке очереди; активная идёт первой. */
+    fun observeJobs(): Flow<List<ProcessingJob>>
+
+    /** [documentUri] — URI из SAF; разрешение на чтение уже получено вызывающим кодом. */
+    suspend fun importFile(documentUri: String, displayName: String): ImportResult
+    suspend fun cancel(recordingId: String)
+    suspend fun retry(recordingId: String)
+
+    /** «Сохранить без этого этапа», например без пунктуации (§7). */
+    suspend fun skipStage(recordingId: String, stage: ProcessingStage)
+}

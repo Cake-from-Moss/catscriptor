@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Разрешение нужно только демо-записи: основная сборка пока не пишет с микрофона (#21). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <application
+        android:name=".demo.DemoApp"
+        tools:replace="android:name">
+        <activity
+            android:name=".demo.DemoControlActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay" />
+    </application>
+</manifest>
