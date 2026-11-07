@@ -57,9 +57,14 @@ data class TranscriptDocument(
     val lines: List<TranscriptLine>,
     val bookmarksMs: List<Long> = emptyList(),
     val asrDraft: List<org.cfm.catscriptor.domain.pipeline.AsrSegment>? = null,
+    /** Спикеры реплик черновика по индексам [asrDraft]; null — диаризация не выполнялась. */
+    val asrDraftSpeakers: List<String>? = null,
 ) {
     init {
         require(asrDraft == null || (lines.isEmpty() && speakers.isEmpty()))
+        require(asrDraftSpeakers == null || asrDraftSpeakers.size == asrDraft?.size) {
+            "Speakers must match the draft one-to-one"
+        }
         // Поиск текущей реплики в плеере бинарный и опирается на этот порядок.
         require(lines.zipWithNext().all { (a, b) -> a.startMs <= b.startMs }) {
             "Lines must be ordered by start time"

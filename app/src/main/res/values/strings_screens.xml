@@ -109,6 +109,8 @@
     <string name="transcript_empty_body">В записи не найдено речи</string>
     <string name="transcript_asr_draft">Черновик ASR</string>
     <string name="transcript_asr_pending_stages">Спикеры ещё не определены. Коррекция текста не выполнена.</string>
+    <string name="transcript_asr_pending_llm">Спикеры определены автоматически. Коррекция текста (LLM) не выполнена.</string>
+    <string name="transcript_asr_speaker_interval">%1$s · %2$s – %3$s</string>
     <string name="transcript_asr_empty">Речь не обнаружена</string>
     <string name="transcript_asr_interval">%1$s – %2$s</string>
     <string name="home_open_asr_draft">Открыть текст ASR</string>

@@ -25,6 +25,7 @@ app/src/main/assets/models/
 /dependencies/*.aar
 /.model-cache/
 /app/src/androidTest/assets/sherpa-example.wav
+/app/src/androidTest/assets/two-speakers-en.wav
 /app/src/main/assets/third-party/
 
 # Signing keys

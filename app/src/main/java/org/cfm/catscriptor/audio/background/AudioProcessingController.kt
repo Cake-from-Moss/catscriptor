@@ -18,6 +18,8 @@ data class AudioProcessingState(
     val stages: List<org.cfm.catscriptor.domain.app.StageProgress> = emptyList(),
     val partialText: String = "",
     val asrDraft: List<org.cfm.catscriptor.domain.pipeline.AsrSegment>? = null,
+    /** Реплики со спикерами после диаризации; null — диаризация не выполнялась. Это черновик до LLM (#7). */
+    val speakerDraft: List<org.cfm.catscriptor.domain.pipeline.Utterance>? = null,
 )
 
 object AudioProcessingController {

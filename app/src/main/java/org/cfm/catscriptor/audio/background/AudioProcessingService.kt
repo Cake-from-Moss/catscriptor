@@ -66,9 +66,11 @@ class AudioProcessingService : Service() {
                 var outcome = AudioProcessingState(AudioProcessingPhase.CANCELLED, message = cancellationMessage)
                 try {
                     outcome = withContext(Dispatchers.IO) {
-                        AsrDraftRunner(AndroidAudioDecoder(this@AudioProcessingService),
+                        DiarizedDraftRunner(AndroidAudioDecoder(this@AudioProcessingService),
                             { org.cfm.catscriptor.native.models.SherpaVoiceActivityDetector(this@AudioProcessingService) },
+                            { org.cfm.catscriptor.native.models.SherpaDiarizationBackend(this@AudioProcessingService) },
                             { org.cfm.catscriptor.native.models.SherpaTranscriptionBackend(this@AudioProcessingService) },
+                            org.cfm.catscriptor.domain.pipeline.DefaultUtteranceMerger(),
                             android.os.SystemClock::elapsedRealtime,
                         ).run(input, AudioProcessingController::publish)
                     }
@@ -131,7 +133,7 @@ class AudioProcessingService : Service() {
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("Подготовка аудио")
-            .setContentText("Подготовка, выделение речи и распознавание на устройстве")
+            .setContentText("Выделение речи, определение говорящих и распознавание на устройстве")
             .setContentIntent(open)
             .setOngoing(true)
             .setProgress(0, 0, true)

@@ -4,7 +4,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 /** Порядок совпадает с конвейером из AGENTS.md. */
-enum class ProcessingStage { PREPARE_AUDIO, DETECT_SPEECH, TRANSCRIBE, DIARIZE, CORRECT_TEXT }
+/** Порядок совпадает с порядком выполнения: диаризация предшествует ASR по ходам спикеров (#6). */
+enum class ProcessingStage { PREPARE_AUDIO, DETECT_SPEECH, DIARIZE, TRANSCRIBE, CORRECT_TEXT }
 
 sealed interface StageStatus {
     data object Pending : StageStatus

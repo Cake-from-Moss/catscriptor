@@ -29,6 +29,13 @@ data class BundledModelSpec(
             return readFiles(input, setOf("silero_vad.onnx", "LICENSE"))
         }
 
+        fun readDiarization(input: InputStream): BundledModelSpec {
+            return readFiles(
+                input,
+                setOf("segmentation.int8.onnx", "embedding.onnx", "LICENSE-pyannote", "LICENSE-3dspeaker"),
+            )
+        }
+
         private fun readFiles(input: InputStream, requiredFiles: Set<String>): BundledModelSpec {
             val properties = Properties().apply { load(input) }
             fun value(key: String) = requireNotNull(properties.getProperty(key)) {
