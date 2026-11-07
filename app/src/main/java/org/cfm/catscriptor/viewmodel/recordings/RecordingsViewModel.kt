@@ -69,7 +69,7 @@ class RecordingsViewModel(
     fun onFilterChange(filter: RecordingFilter) = _query.update { it.copy(filter = filter) }
 
     fun openTarget(summary: RecordingSummary): RecordingOpenTarget = when (summary.status) {
-        RecordingStatus.Ready -> RecordingOpenTarget.Transcript(summary.id)
+        RecordingStatus.Ready, RecordingStatus.AsrReady -> RecordingOpenTarget.Transcript(summary.id)
         else -> RecordingOpenTarget.ProcessingDetails
     }
 

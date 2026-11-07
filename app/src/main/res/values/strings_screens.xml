@@ -64,6 +64,7 @@
     <string name="recordings_processing_meta">Обработка %1$d%% · %2$s</string>
     <string name="recordings_queued_meta">В очереди на обработку</string>
     <string name="recordings_failed_meta">Ошибка: %1$s</string>
+    <string name="recordings_asr_ready_meta">Текст ASR · %1$s</string>
     <string name="recordings_source_mic">Запись с микрофона</string>
     <string name="recordings_source_file">Импортированный файл</string>
     <string name="recordings_more">Действия с записью «%1$s»</string>
@@ -106,6 +107,11 @@
     <string name="transcript_missing_title">Расшифровка недоступна</string>
     <string name="transcript_missing_body">Запись удалена или ещё обрабатывается</string>
     <string name="transcript_empty_body">В записи не найдено речи</string>
+    <string name="transcript_asr_draft">Черновик ASR</string>
+    <string name="transcript_asr_pending_stages">Спикеры ещё не определены. Коррекция текста не выполнена.</string>
+    <string name="transcript_asr_empty">Речь не обнаружена</string>
+    <string name="transcript_asr_interval">%1$s – %2$s</string>
+    <string name="home_open_asr_draft">Открыть текст ASR</string>
 
     <!-- Плеер -->
     <string name="player_play">Воспроизвести</string>

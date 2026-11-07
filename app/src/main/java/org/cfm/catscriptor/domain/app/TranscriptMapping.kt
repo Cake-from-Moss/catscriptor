@@ -1,7 +1,5 @@
 package org.cfm.catscriptor.domain.app
 
-import org.cfm.catscriptor.domain.pipeline.TimeRange
-import org.cfm.catscriptor.domain.pipeline.TimedWord
 import org.cfm.catscriptor.domain.pipeline.Transcript
 import org.cfm.catscriptor.domain.pipeline.Utterance
 
@@ -79,22 +77,19 @@ fun TranscriptDocument.withRecomputedSpeakers(): TranscriptDocument {
 }
 
 /**
- * Обратный перевод для строгого JSON-экспорта через DefaultTranscriptExporter. Исходные слова ASR
- * в модели экрана не хранятся, поэтому каждая реплика получает одно слово на весь свой интервал:
- * экспортёр сериализует только speaker_id, start_ms, end_ms и text.
+ * Обратный перевод для строгого JSON-экспорта без синтетических слов:
+ * текст (включая пустой) и абсолютные интервалы реплик сохраняются без изменений.
  */
-fun TranscriptDocument.toPipelineTranscript(): Transcript = Transcript(
+fun TranscriptDocument.toPipelineTranscript(): Transcript {
+    require(asrDraft == null) { "ASR draft cannot be exported" }
+    return Transcript(
     lines.sortedBy { it.startMs }.map { line ->
-        val range = TimeRange(line.startMs, line.endMs)
         Utterance(
             speakerId = line.speakerId,
             startMs = line.startMs,
             endMs = line.endMs,
             text = line.text,
-            words = listOf(TimedWord(line.text.ifBlank { BLANK_WORD }, range)),
         )
     },
 )
-
-/** TimedWord не допускает пустой текст, а реплику пользователь может очистить. */
-private const val BLANK_WORD = "…"
+}

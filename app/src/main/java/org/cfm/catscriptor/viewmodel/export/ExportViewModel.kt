@@ -77,7 +77,8 @@ class ExportViewModel(
     // отменяется, чтобы медленный ответ не перетёр свежий.
     private val preview: Flow<String?> = combine(options, document.filterNotNull()) { opts, doc -> opts to doc }
         .distinctUntilChanged()
-        .mapLatest<Pair<ExportOptions, TranscriptDocument>, String?> { (opts, _) ->
+        .mapLatest<Pair<ExportOptions, TranscriptDocument>, String?> { (opts, doc) ->
+            if (doc.asrDraft != null) return@mapLatest ""
             try {
                 gateway.preview(recordingId, opts)
             } catch (cancelled: CancellationException) {
@@ -117,6 +118,7 @@ class ExportViewModel(
         val opts = options.value
         events.send(
             try {
+                check(document.value?.asrDraft == null && document.value != null)
                 ExportEvent.Share(gateway.prepareShare(recordingId, opts))
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -133,6 +135,7 @@ class ExportViewModel(
             val opts = options.value
             events.send(
                 try {
+                    check(document.value?.asrDraft == null && document.value != null)
                     val name = gateway.saveTo(documentUri, recordingId, opts)
                     ExportEvent.Saved(name, documentUri, mimeTypeOf(opts.format))
                 } catch (cancelled: CancellationException) {

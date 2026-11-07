@@ -10,7 +10,7 @@ data class TimeRange(val startMs: Long, val endMs: Long) {
         startMs <= other.startMs && endMs >= other.endMs
 }
 
-/** Исходное слово ASR и его привязка к аудио; LLM не заменяет его временные метки. */
+/** Экспериментальная пословная привязка; не является обязательной частью результата ASR. */
 data class TimedWord(val text: String, val time: TimeRange) {
     init {
         require(text.isNotBlank()) { "A timed word must contain text" }
@@ -20,15 +20,8 @@ data class TimedWord(val text: String, val time: TimeRange) {
 /** Речь, обнаруженная VAD; временные метки отсчитываются от начала записи. */
 data class SpeechSegment(val time: TimeRange)
 
-/** ASR должен выдавать привязку слов к аудио, а не равномерно делить интервал между словами. */
-data class AsrSegment(val time: TimeRange, val words: List<TimedWord>) {
-    init {
-        require(words.all { time.contains(it.time) }) { "Words must lie inside the segment" }
-        require(words.zipWithNext().all { (a, b) -> a.time.startMs <= b.time.startMs }) {
-            "Words must be ordered by start time"
-        }
-    }
-}
+/** Текст и абсолютный интервал обработанного фрагмента; пустой текст допустим для тишины. */
+data class AsrSegment(val time: TimeRange, val text: String)
 
 /** Интервалы могут перекрываться, в том числе у разных спикеров. */
 data class SpeakerSegment(val speakerId: String, val time: TimeRange) {
