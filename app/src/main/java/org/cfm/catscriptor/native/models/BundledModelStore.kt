@@ -29,6 +29,20 @@ data class BundledModelSpec(
             return readFiles(input, setOf("silero_vad.onnx", "LICENSE"))
         }
 
+        /**
+         * Комплект локальной LLM: ровно один .gguf и LICENSE. Имя весов произвольное,
+         * поэтому вместо фиксированного списка — структурная проверка, строгость та же.
+         */
+        fun readLlm(input: InputStream): BundledModelSpec {
+            return readFiles(input, null).also { spec ->
+                val names = spec.files.map { it.name }
+                require(names.count { it.endsWith(".gguf") } == 1) {
+                    "В комплекте LLM должен быть ровно один файл .gguf"
+                }
+                require("LICENSE" in names) { "В комплекте LLM отсутствует LICENSE" }
+            }
+        }
+
         fun readDiarization(input: InputStream): BundledModelSpec {
             return readFiles(
                 input,
@@ -36,7 +50,7 @@ data class BundledModelSpec(
             )
         }
 
-        private fun readFiles(input: InputStream, requiredFiles: Set<String>): BundledModelSpec {
+        private fun readFiles(input: InputStream, requiredFiles: Set<String>?): BundledModelSpec {
             val properties = Properties().apply { load(input) }
             fun value(key: String) = requireNotNull(properties.getProperty(key)) {
                 "В манифесте модели отсутствует $key"
@@ -59,10 +73,12 @@ data class BundledModelSpec(
                         value("$name.sha256").also { require(it.matches(Regex("[0-9a-f]{64}"))) },
                     )
                 }.also { files ->
-                    require(files.map { it.name }.toSet() == requiredFiles) {
-                        "Несовместимый комплект модели"
+                    if (requiredFiles != null) {
+                        require(files.map { it.name }.toSet() == requiredFiles) {
+                            "Несовместимый комплект модели"
+                        }
+                        require(files.size == requiredFiles.size)
                     }
-                    require(files.size == requiredFiles.size)
                 },
             )
         }

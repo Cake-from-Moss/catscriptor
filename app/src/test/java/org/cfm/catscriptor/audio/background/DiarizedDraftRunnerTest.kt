@@ -14,10 +14,14 @@ class DiarizedDraftRunnerTest {
         val speakers: List<SpeakerSegment>,
         val asrFailure: Exception? = null,
         val diarizationFailure: Exception? = null,
+        val correctorFailure: Exception? = null,
+        /** Ответы корректора по startMs реплики; null — вернуть текст без изменений. */
+        val corrections: Map<Long, String> = emptyMap(),
     ) {
         val events = mutableListOf<String>()
         val states = mutableListOf<AudioProcessingState>()
         val transcribed = mutableListOf<TimeRange>()
+        val corrected = mutableListOf<Long>()
         val pcm = object : PcmAudioSource {
             override val sampleCount = 160_000L
             override suspend fun read(startSample: Long, maxSamples: Int) = FloatArray(maxSamples)
@@ -58,6 +62,18 @@ class DiarizedDraftRunnerTest {
                 }
             },
             merger = DefaultUtteranceMerger(),
+            correctorFactory = {
+                events += "corrector.create"
+                object : TextCorrectionBackend {
+                    override suspend fun correct(utterance: Utterance): String {
+                        events += "corrector.correct"
+                        correctorFailure?.let { throw it }
+                        corrected += utterance.startMs
+                        return corrections[utterance.startMs] ?: utterance.text
+                    }
+                    override fun close() { events += "corrector.close" }
+                }
+            },
             clock = { 100L },
         )
         suspend fun run() = runner.run(AudioInput("content://test/audio"), states::add)
@@ -69,25 +85,33 @@ class DiarizedDraftRunnerTest {
         val fixture = Fixture(
             speech = listOf(SpeechSegment(TimeRange(1_000, 6_000))),
             speakers = listOf(spk(1, 1_000, 3_000), spk(2, 3_000, 6_000)),
+            corrections = mapOf(1_000L to "Исправлено 1000.", 3_000L to "Исправлено 3000."),
         )
         val result = fixture.run()
         assertEquals(listOf("decode", "vad.create", "vad.close", "diarizer.create", "diarizer.diarize", "diarizer.close",
-            "asr.create", "asr.transcribe", "asr.transcribe", "asr.close", "pcm.close"), fixture.events)
+            "asr.create", "asr.transcribe", "asr.transcribe", "asr.close",
+            "corrector.create", "corrector.correct", "corrector.correct", "corrector.close", "pcm.close"), fixture.events)
         // Один VAD-сегмент с двумя говорящими даёт два отдельных ASR-вызова по ходам, без деления текста.
         assertEquals(listOf(TimeRange(1_000, 3_000), TimeRange(3_000, 6_000)), fixture.transcribed)
         assertEquals(listOf("speaker_1", "speaker_2"), result.speakerDraft!!.map { it.speakerId })
         assertEquals(listOf(1_000L, 3_000L), result.speakerDraft!!.map { it.startMs })
         assertEquals(AudioProcessingPhase.COMPLETED, result.phase)
-        assertTrue(result.stages.filter { it.stage != ProcessingStage.CORRECT_TEXT }.all { it.status is StageStatus.Done })
-        assertEquals(StageStatus.Pending, result.stages.single { it.stage == ProcessingStage.CORRECT_TEXT }.status)
+        assertTrue(result.stages.all { it.status is StageStatus.Done })
+        // Финальный транскрипт: исправленный текст, спикеры и таймкоды исходные.
+        assertEquals(listOf("Исправлено 1000.", "Исправлено 3000."), result.transcript!!.map { it.text })
+        assertEquals(listOf("speaker_1", "speaker_2"), result.transcript.map { it.speakerId })
+        assertEquals(listOf(1_000L, 3_000L), result.transcript.map { it.startMs })
+        assertEquals(listOf(3_000L, 6_000L), result.transcript.map { it.endMs })
     }
 
-    @Test fun silenceNeverCreatesDiarizerOrAsr() = runBlocking {
+    @Test fun silenceNeverCreatesDiarizerAsrOrCorrector() = runBlocking {
         val fixture = Fixture(emptyList(), emptyList())
         val result = fixture.run()
         assertEquals(emptyList<Utterance>(), result.speakerDraft)
+        assertEquals(emptyList<Utterance>(), result.transcript)
         assertFalse(fixture.events.contains("diarizer.create"))
         assertFalse(fixture.events.contains("asr.create"))
+        assertFalse(fixture.events.contains("corrector.create"))
         assertEquals("pcm.close", fixture.events.last())
     }
 
@@ -95,7 +119,9 @@ class DiarizedDraftRunnerTest {
         val fixture = Fixture(listOf(SpeechSegment(TimeRange(0, 5_000))), emptyList())
         val result = fixture.run()
         assertEquals(emptyList<Utterance>(), result.speakerDraft)
+        assertEquals(emptyList<Utterance>(), result.transcript)
         assertFalse(fixture.events.contains("asr.create"))
+        assertFalse(fixture.events.contains("corrector.create"))
     }
 
     @Test fun diarizationFailureClosesEverythingAndNeverStartsAsr() {
@@ -112,11 +138,32 @@ class DiarizedDraftRunnerTest {
             asrFailure = CancellationException("cancelled"))
         assertThrows(CancellationException::class.java) { runBlocking { fixture.run() } }
         assertEquals(listOf("asr.create", "asr.transcribe", "asr.close", "pcm.close"), fixture.events.takeLast(4))
+        assertFalse(fixture.events.contains("corrector.create"))
     }
 
-    @Test fun draftIsNeverPublishedBeforeMerge() = runBlocking {
+    @Test fun correctionFailureClosesCorrectorAndFailsStage() {
+        val fixture = Fixture(listOf(SpeechSegment(TimeRange(0, 5_000))), listOf(spk(1, 0, 5_000)),
+            correctorFailure = IllegalStateException("llm native"))
+        assertThrows(IllegalStateException::class.java) { runBlocking { fixture.run() } }
+        assertEquals(listOf("corrector.create", "corrector.correct", "corrector.close", "pcm.close"),
+            fixture.events.takeLast(4))
+        assertTrue(fixture.states.last().stages.any { it.stage == ProcessingStage.CORRECT_TEXT && it.status is StageStatus.Failed })
+        assertNull(fixture.states.last().transcript)
+    }
+
+    @Test fun blankCorrectionKeepsRecognizedText() = runBlocking {
+        val fixture = Fixture(listOf(SpeechSegment(TimeRange(0, 5_000))), listOf(spk(1, 0, 5_000)),
+            corrections = mapOf(0L to "   "))
+        val result = fixture.run()
+        assertEquals(listOf("реплика 0"), result.transcript!!.map { it.text })
+        assertEquals(listOf("speaker_1"), result.transcript.map { it.speakerId })
+    }
+
+    @Test fun draftIsNeverPublishedBeforeMergeAndCorrection() = runBlocking {
         val fixture = Fixture(listOf(SpeechSegment(TimeRange(0, 5_000))), listOf(spk(1, 0, 5_000)))
         fixture.run()
-        assertTrue(fixture.states.all { it.speakerDraft == null || it.phase == AudioProcessingPhase.COMPLETED })
+        assertTrue(fixture.states.all {
+            (it.speakerDraft == null && it.transcript == null) || it.phase == AudioProcessingPhase.COMPLETED
+        })
     }
 }

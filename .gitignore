@@ -32,3 +32,6 @@ app/src/main/assets/models/
 *.jks
 *.keystore
 scripts/__pycache__/
+
+# Vendored inference engine (pinned by dependencies/llama-cpp.properties)
+/dependencies/llama.cpp/

@@ -20,6 +20,8 @@ data class AudioProcessingState(
     val asrDraft: List<org.cfm.catscriptor.domain.pipeline.AsrSegment>? = null,
     /** Реплики со спикерами после диаризации; null — диаризация не выполнялась. Это черновик до LLM (#7). */
     val speakerDraft: List<org.cfm.catscriptor.domain.pipeline.Utterance>? = null,
+    /** Финальный транскрипт после локальной LLM-коррекции (#7); null — коррекция ещё не выполнена. */
+    val transcript: List<org.cfm.catscriptor.domain.pipeline.Utterance>? = null,
 )
 
 object AudioProcessingController {

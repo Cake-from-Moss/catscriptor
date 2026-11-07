@@ -71,7 +71,9 @@ class AudioProcessingService : Service() {
                             { org.cfm.catscriptor.native.models.SherpaDiarizationBackend(this@AudioProcessingService) },
                             { org.cfm.catscriptor.native.models.SherpaTranscriptionBackend(this@AudioProcessingService) },
                             org.cfm.catscriptor.domain.pipeline.DefaultUtteranceMerger(),
+                            { org.cfm.catscriptor.native.models.LlamaTextCorrector.create(this@AudioProcessingService) },
                             android.os.SystemClock::elapsedRealtime,
+                            logTiming = { android.util.Log.i("PipelineTiming", it) },
                         ).run(input, AudioProcessingController::publish)
                     }
                     ensureActive()

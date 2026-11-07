@@ -120,7 +120,9 @@ internal class PipelineProcessingController(
                 currentId = null
                 store.update(id) {
                     it.copy(
-                        status = RecordingStatus.AsrReady,
+                        // Финальный транскрипт после LLM (#7) означает готовность записи;
+                        // null — защитный фолбэк для старых состояний: остаётся ASR-черновик.
+                        status = if (state.transcript != null) RecordingStatus.Ready else RecordingStatus.AsrReady,
                         processingState = state,
                         durationMs = state.sampleCount * 1000L / PcmAudioSource.SAMPLE_RATE_HZ,
                         prepareElapsedMs = SystemClock.elapsedRealtime() - stageStartedAtMs,
@@ -204,14 +206,14 @@ internal class PipelineProcessingController(
     /** Модели нужны этапам после PREPARE_AUDIO; проверяем комплект без распаковки в файловую систему. */
     private fun checkModels(): ModelsStatus {
         return try {
-            for (manifest in listOf(MODEL_MANIFEST, "vad-manifest.properties", "diarization-manifest.properties")) {
-            val spec = appContext.assets.open(manifest).use {
-                when (manifest) {
-                    MODEL_MANIFEST -> BundledModelSpec.read(it)
-                    "vad-manifest.properties" -> BundledModelSpec.readVad(it)
-                    else -> BundledModelSpec.readDiarization(it)
-                }
-            }
+            val manifests = listOf(
+                MODEL_MANIFEST to { stream: java.io.InputStream -> BundledModelSpec.read(stream) },
+                "vad-manifest.properties" to { stream -> BundledModelSpec.readVad(stream) },
+                "diarization-manifest.properties" to { stream -> BundledModelSpec.readDiarization(stream) },
+                LLM_MANIFEST to { stream -> BundledModelSpec.readLlm(stream) },
+            )
+            for ((manifest, readSpec) in manifests) {
+            val spec = appContext.assets.open(manifest).use(readSpec)
             val broken = spec.files.firstOrNull { file ->
                 appContext.assets.open("${spec.assetDirectory}/${file.name}").use {
                     it.available().toLong() != file.size
@@ -227,6 +229,7 @@ internal class PipelineProcessingController(
 
     private companion object {
         const val MODEL_MANIFEST = "model-manifest.properties"
+        const val LLM_MANIFEST = "llm-manifest.properties"
         const val RUN_FRACTION = 0.05f
         const val DONE_FRACTION = 0.2f
     }

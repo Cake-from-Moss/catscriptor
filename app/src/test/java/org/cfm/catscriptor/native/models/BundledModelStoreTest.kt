@@ -118,6 +118,41 @@ class BundledModelStoreTest {
         }
     }
 
+    @Test fun llmManifestRequiresSingleGgufAndLicenseAndStaysIndependent() {
+        val manifest = """
+            model.id=qwen-test
+            model.directory=models/qwen-test
+            files=qwen-test.gguf,LICENSE
+            qwen-test.gguf.size=1
+            qwen-test.gguf.sha256=${sha(byteArrayOf(1))}
+            LICENSE.size=1
+            LICENSE.sha256=${sha(byteArrayOf(1))}
+        """.trimIndent()
+        assertEquals(setOf("qwen-test.gguf", "LICENSE"),
+            BundledModelSpec.readLlm(manifest.byteInputStream()).files.map { it.name }.toSet())
+        // ASR/VAD-парсеры не принимают LLM-комплект и наоборот.
+        assertThrows(IllegalArgumentException::class.java) { BundledModelSpec.read(manifest.byteInputStream()) }
+        assertThrows(IllegalArgumentException::class.java) { BundledModelSpec.readVad(manifest.byteInputStream()) }
+        // Нет LICENSE или больше одного .gguf — отказ.
+        assertThrows(IllegalArgumentException::class.java) {
+            BundledModelSpec.readLlm(manifest.replace(",LICENSE", "").byteInputStream())
+        }
+        val twoGguf = """
+            model.id=qwen-test
+            model.directory=models/qwen-test
+            files=a.gguf,b.gguf,LICENSE
+            a.gguf.size=1
+            a.gguf.sha256=${sha(byteArrayOf(1))}
+            b.gguf.size=1
+            b.gguf.sha256=${sha(byteArrayOf(2))}
+            LICENSE.size=1
+            LICENSE.sha256=${sha(byteArrayOf(1))}
+        """.trimIndent()
+        assertThrows(IllegalArgumentException::class.java) {
+            BundledModelSpec.readLlm(twoGguf.byteInputStream())
+        }
+    }
+
     private fun sha(data: ByteArray) = MessageDigest.getInstance("SHA-256")
         .digest(data).joinToString("") { "%02x".format(it) }
 }

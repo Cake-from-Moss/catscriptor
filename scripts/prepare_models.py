@@ -44,6 +44,30 @@ def download(url, expected, destination):
             temporary.unlink(missing_ok=True)
 
 
+def extract_engine(properties_path):
+    """Распаковка закреплённого архива llama.cpp в dependencies/llama.cpp (версия — в .catscriptor-version)."""
+    engine = properties(properties_path)
+    target = ROOT / "dependencies/llama.cpp"
+    marker = target / ".catscriptor-version"
+    if marker.is_file() and marker.read_text().strip() == engine["version"] and (target / "CMakeLists.txt").is_file():
+        return
+    archive = ROOT / ".model-cache" / engine["file"]
+    download(engine["url"], engine["sha256"], archive)
+    temporary = ROOT / ".model-cache" / "llama.cpp-extract"
+    if temporary.exists():
+        shutil.rmtree(temporary)
+    with tarfile.open(archive) as source:
+        source.extractall(temporary)
+    extracted = temporary / f"llama.cpp-{engine['version'].lstrip('v')}"
+    if not (extracted / "CMakeLists.txt").is_file():
+        raise ValueError(f"В архиве {engine['file']} отсутствует корень llama.cpp")
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.move(str(extracted), target)
+    marker.write_text(engine["version"] + "\n")
+    shutil.rmtree(temporary)
+
+
 def prepare_diarization():
     """Pyannote segmentation 3.0 (из архива sherpa) и CAM++ 3D-Speaker; файлы проверяются по SHA-256."""
     manifest = properties(ROOT / "app/src/main/assets/diarization-manifest.properties")
@@ -86,6 +110,8 @@ def prepare_diarization():
 
 def main():
     model = properties(ROOT / "app/src/main/assets/model-manifest.properties")
+    llm = properties(ROOT / "app/src/main/assets/llm-manifest.properties")
+    extract_engine(ROOT / "dependencies/llama-cpp.properties")
     library = properties(ROOT / "dependencies/sherpa-onnx.properties")
     licenses = properties(ROOT / "dependencies/licenses.properties")
     for name in licenses["files"].split(","):
@@ -129,8 +155,15 @@ def main():
         download(vad[f"{name}.url"], vad[f"{name}.sha256"], target)
         if target.stat().st_size != int(vad[f"{name}.size"]):
             raise ValueError(f"Неверный размер VAD-файла: {name}")
+    llm_destination = ROOT / "app/src/main/assets" / llm["model.directory"]
+    llm_destination.mkdir(parents=True, exist_ok=True)
+    for name in llm["files"].split(","):
+        target = llm_destination / name
+        download(llm[f"{name}.url"], llm[f"{name}.sha256"], target)
+        if target.stat().st_size != int(llm[f"{name}.size"]):
+            raise ValueError(f"Неверный размер LLM-файла: {name}")
     prepare_diarization()
-    print("AAR, ASR, VAD и диаризация подготовлены и проверены.")
+    print("AAR, ASR, VAD, LLM и диаризация подготовлены и проверены.")
 
 
 if __name__ == "__main__":

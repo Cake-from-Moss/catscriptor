@@ -25,17 +25,29 @@ internal data class PipelineEntry(
     val hidden: Boolean = false,
     val pendingCommitDelete: Boolean = false,
     val processingState: org.cfm.catscriptor.audio.background.AudioProcessingState? = null,
+    /** Пользовательские правки поверх финального транскрипта; null — правок не было. */
+    val editedTranscript: List<org.cfm.catscriptor.domain.pipeline.Utterance>? = null,
+    /** Заданные пользователем имена спикеров (speaker_N → имя). */
+    val speakerDisplayNames: Map<String, String> = emptyMap(),
 ) {
+    /** Транскрипт для показа: правки пользователя поверх результата пайплайна. */
+    fun displayedTranscript(): List<org.cfm.catscriptor.domain.pipeline.Utterance> =
+        editedTranscript ?: processingState?.transcript.orEmpty()
+
     fun toSummary() = RecordingSummary(
         id = id,
         title = title,
         source = RecordingSource.FILE,
         createdAtEpochMs = createdAtEpochMs,
         durationMs = durationMs,
-        speakerCount = processingState?.speakerDraft?.map { it.speakerId }?.distinct()?.size,
-        previewSpeakerId = processingState?.speakerDraft?.firstOrNull()?.speakerId,
-        previewSpeakerName = null,
-        previewText = processingState?.asrDraft?.firstOrNull()?.text,
+        speakerCount = (displayedTranscript().takeIf { it.isNotEmpty() }
+            ?: processingState?.speakerDraft)?.map { it.speakerId }?.distinct()?.size,
+        previewSpeakerId = displayedTranscript().firstOrNull()?.speakerId
+            ?: processingState?.speakerDraft?.firstOrNull()?.speakerId,
+        previewSpeakerName = displayedTranscript().firstOrNull()?.speakerId
+            ?.let { speakerDisplayNames[it] },
+        previewText = displayedTranscript().firstOrNull()?.text
+            ?: processingState?.asrDraft?.firstOrNull()?.text,
         status = status,
     )
 }

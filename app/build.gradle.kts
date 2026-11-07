@@ -9,6 +9,7 @@ plugins {
 // Проверка выполняется без скачивания: APK обязан содержать проверенную модель.
 val modelManifest = file("src/main/assets/model-manifest.properties")
 val vadManifest = file("src/main/assets/vad-manifest.properties")
+val llmManifest = file("src/main/assets/llm-manifest.properties")
 val diarizationManifest = file("src/main/assets/diarization-manifest.properties")
 val sherpaManifest = rootProject.file(
     if (providers.gradleProperty("ctcPrototype").orNull == "true") ".model-cache/ctc-prototype.properties"
@@ -19,12 +20,14 @@ val sherpaAar = rootProject.file("dependencies/${sherpa.getProperty("file")}")
 val verifyBundledModels = tasks.register("verifyBundledModels") {
     val manifestFile = modelManifest
     val vadManifestFile = vadManifest
+    val llmManifestFile = llmManifest
     val diarizationManifestFile = diarizationManifest
     val libraryFile = sherpaAar
     val libraryHash = sherpa.getProperty("sha256")
     val assetsDirectory = layout.projectDirectory.dir("src/main/assets").asFile
     inputs.file(modelManifest)
     inputs.file(vadManifest)
+    inputs.file(llmManifest)
     inputs.file(diarizationManifest)
     inputs.file(sherpaManifest)
     inputs.files(fileTree("src/main/assets/models"))
@@ -52,8 +55,7 @@ val verifyBundledModels = tasks.register("verifyBundledModels") {
             }
         }
         verify(libraryFile, libraryHash)
-        listOf(manifestFile, vadManifestFile, diarizationManifestFile).forEach { modelFile ->
-            val manifest = Properties().apply { modelFile.inputStream().use { load(it) } }
+        listOf(manifestFile, vadManifestFile, llmManifestFile, diarizationManifestFile).forEach { modelFile ->            val manifest = Properties().apply { modelFile.inputStream().use { load(it) } }
             manifest.getProperty("files").split(',').forEach { name ->
                 verify(
                     File(assetsDirectory, "${manifest.getProperty("model.directory")}/$name"),

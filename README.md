@@ -2,13 +2,24 @@
 
 Android-приложение для хакатона Nuclear IT Hack. Превращает аудиозаписи разговоров в расшифровку со спикерами и таймкодами. Вся обработка выполняется на устройстве, без интернета.
 
-**Статус:** пользовательский импорт подключён к реальному офлайн-пути
+**Статус:** пользовательский импорт и запись подключены к полному офлайн-пути
 декодирование → Silero VAD → диаризация (pyannote segmentation 3.0 + CAM++, sherpa-onnx) →
-GigaAM v3 CTC int8 по ходам спикеров → слияние реплик → экран черновика со `speaker_N`.
-Модели упакованы в APK. Обязательная LLM #7 ещё не подключена; черновик не экспортируется.
-Результаты хранятся в памяти процесса. Диаризация проверена только JVM-тестами и на десктопе;
-**запуск на ARM64 не подтверждён** (устройство не было подключено). См. [диаризация](docs/diarization.md),
+GigaAM v3 CTC int8 по ходам спикеров → слияние реплик → LLM-коррекция текста →
+готовый транскрипт со спикерами, таймкодами и исправленным текстом (`RecordingStatus.Ready`).
+Готовые записи открываются на экране транскрипта с правкой реплик и имён спикеров.
+Модели упакованы в APK, сеть не используется. Результаты хранятся в памяти процесса.
+Полный путь проверен end-to-end на vivo V2538 (Snapdragon 4 Gen 2): сэмпл ~15 с
+превращается в готовый транскрипт за ~35 с (LLM-коррекция 3,5 ток/с — доминирующий
+этап; WER до/после на записях A/B/C команда ещё не измерила).
+См. [диаризация](docs/diarization.md), [LLM-коррекция](docs/llm-correction.md),
 [VAD/ASR](docs/vad-asr.md).
+
+LLM-коррекция (#7): Qwen2.5-1.5B-Instruct Q4_K_M на закреплённом llama.cpp v0.9.0
+через JNI (`LlamaTextCorrector`) — встроена в `DiarizedDraftRunner` как этап
+`CORRECT_TEXT`: модель грузится после освобождения GigaAM и освобождается после
+этапа; промпт на русском, жадное декодирование, защита от галлюцинаций
+(`CorrectionGuard`) возвращает исходный текст при сомнительной правке. Подробности
+и ограничения: [llm-correction](docs/llm-correction.md).
 
 Запись микрофона (#21): локальный AAC/M4A, пауза, таймер и отметки;
 после остановки файл поступает в ту же очередь. Только при открытом приложении,
@@ -134,6 +145,8 @@ Debug APK: `app/build/outputs/apk/debug/app-debug.apk`. Release APK без на�
 | Диаризация: эмбеддинги | 3D-Speaker CAM++ zh_en advanced | speaker-recongition-models | [ONNX](https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx) | `diarization-pyannote3-int8-campplus-zh-en-adv/embedding.onnx` | `aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2` |
 | Лицензии диаризации | pyannote MIT; 3D-Speaker Apache-2.0 | см. манифест | `diarization-manifest.properties` | `diarization-pyannote3-int8-campplus-zh-en-adv/LICENSE-*` | см. манифест |
 | Лицензия VAD | Silero MIT | v4.0 | [LICENSE](https://raw.githubusercontent.com/snakers4/silero-vad/v4.0/LICENSE) | `silero-vad-v4-k2-fsa-9e2449e1/LICENSE` | `2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b` |
+| LLM-коррекция | Qwen2.5-1.5B-Instruct Q4_K_M | HF main | [GGUF](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf) | `qwen2.5-1.5b-instruct-q4_k_m-2026-11-07/qwen2.5-1.5b-instruct-q4_k_m.gguf` | `6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e` |
+| Лицензия LLM | Apache-2.0 | — | [LICENSE](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/LICENSE) | `qwen2.5-1.5b-instruct-q4_k_m-2026-11-07/LICENSE` | `832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e` |
 
 Выбран официальный AAR sherpa-onnx **2.0.1**, а не собственная сборка: Android API
 покрывает загрузку, decode, VAD и освобождение. Исследовательская сборка с экспортом
@@ -143,10 +156,17 @@ CTC logits включается отдельно, не заменяет офиц
 
 `BundledModelStore` копирует проверенные assets в `noBackupFilesDir/models/`,
 не перезаписывает неизменённые файлы и проверяет SHA-256 перед нативной загрузкой.
-Нужны дополнительно примерно 214 МиБ внутреннего хранилища. `SherpaModelResource`
+Нужны дополнительно примерно 214 МиБ внутреннего хранилища для ASR/VAD и ещё
+~1065 МиБ под GGUF LLM. `SherpaModelResource`
 загружает модель лениво на `Dispatchers.IO`; поток распознавания освобождается в
 `finally`, recognizer — через `close()` владельца этапа. Закрытие идемпотентно,
 его нужно вызывать вне UI-потока. Приложение не запрашивает `INTERNET`.
+
+LLM (issue #7) работает через собственный JNI-мост `libllm-jni.so` поверх
+llama.cpp v0.9.0 (vendored в `dependencies/llama.cpp`, в git не коммитится).
+Исходники, версия и SHA-256 зафиксированы в `dependencies/llama-cpp.properties`,
+лицензия MIT лежит в `assets/third-party/`. `LlamaTextCorrector` держит модель
+один раз на этап `CORRECT_TEXT` и освобождает контекст и веса в `close()`.
 
 Это начальный комплект для #4, **не победитель сравнения WER/RTF**. Остальные модели
 диаризации и обязательного LLM пока не включены: текущий APK не является
@@ -158,6 +178,15 @@ CTC logits включается отдельно, не заменяет офиц
 ```bash
 ./gradlew :app:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=org.cfm.catscriptor.native.models.SherpaModelSmokeTest
+```
+
+LLM-коррекция проверяется отдельным долгим smoke-тестом (реальный JNI + GGUF из APK,
+проверка в авиарежиме, пунктуация, неприкосновенность цифр/отрицаний, отмена,
+повторная загрузка):
+
+```bash
+./gradlew :app:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=org.cfm.catscriptor.native.models.LlamaCorrectionSmokeTest
 ```
 
 Тест действительно распознаёт WAV из официального архива, проверяет повторное

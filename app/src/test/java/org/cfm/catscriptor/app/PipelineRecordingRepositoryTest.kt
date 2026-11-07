@@ -56,6 +56,44 @@ class PipelineRecordingRepositoryTest {
         assertEquals(draft, repository.observeTranscript("id").first()!!.asrDraft)
     }
 
+    @Test fun finalTranscriptExposesEditableLinesAndSpeakerNames() = runBlocking {
+        val store = PipelineStore()
+        val utterances = listOf(
+            org.cfm.catscriptor.domain.pipeline.Utterance("speaker_1", 1000, 2000, "привет"),
+            org.cfm.catscriptor.domain.pipeline.Utterance("speaker_2", 2500, 3500, "здравствуй"),
+        )
+        store.upsert(PipelineEntry("id", "Диалог", "content://audio", "wav", 1, 4000, RecordingStatus.Ready,
+            processingState = AudioProcessingState(AudioProcessingPhase.COMPLETED, transcript = utterances)))
+        val repository = PipelineRecordingRepository(store)
+
+        val document = requireNotNull(repository.observeTranscript("id").first())
+        assertNull(document.asrDraft)
+        assertEquals(listOf("speaker_1", "speaker_2"), document.speakers.map { it.id })
+        assertEquals(listOf("привет", "здравствуй"), document.lines.map { it.text })
+        assertTrue(document.speakers.all { it.displayName == null })
+        assertEquals(0.5f, document.speakers.single { it.id == "speaker_1" }.shareFraction, 0.001f)
+
+        repository.editLineText("id", document.lines.first().id, "Привет!")
+        repository.renameSpeaker("id", "speaker_2", "Мария")
+        val edited = requireNotNull(repository.observeTranscript("id").first())
+        assertEquals("Привет!", edited.lines.first().text)
+        assertEquals("Мария", edited.speakers.single { it.id == "speaker_2" }.displayName)
+        // Таймкоды и спикеры от правки текста не меняются.
+        assertEquals(document.lines.first().startMs, edited.lines.first().startMs)
+        assertEquals(document.lines.first().speakerId, edited.lines.first().speakerId)
+
+        repository.changeLineSpeaker("id", edited.lines.first().id, "speaker_2")
+        val moved = requireNotNull(repository.observeTranscript("id").first())
+        assertEquals("speaker_2", moved.lines.first().speakerId)
+        assertEquals(1f, moved.speakers.single { it.id == "speaker_2" }.shareFraction, 0.001f)
+
+        val summary = repository.observe().first().single()
+        // Обе реплики после смены спикера принадлежат speaker_2.
+        assertEquals(1, summary.speakerCount)
+        assertEquals("speaker_2", summary.previewSpeakerId)
+        assertEquals("Привет!", summary.previewText)
+    }
+
     @Test fun silenceDraftIsNotConfusedWithMissingTranscript() = runBlocking {
         val store = PipelineStore()
         val repository = PipelineRecordingRepository(store)

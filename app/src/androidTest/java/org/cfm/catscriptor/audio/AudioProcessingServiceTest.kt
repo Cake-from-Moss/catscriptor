@@ -11,6 +11,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.cfm.catscriptor.MainActivity
 import org.cfm.catscriptor.audio.background.AudioProcessingController
 import org.cfm.catscriptor.audio.background.AudioProcessingPhase
+import org.cfm.catscriptor.audio.background.AudioProcessingState
 import org.cfm.catscriptor.domain.pipeline.AudioInput
 import org.junit.Assert.*
 import org.junit.Before
@@ -26,6 +27,12 @@ class AudioProcessingServiceTest {
     private var preexistingAudioDirectories = emptySet<String>()
     private val screenOffRequested: Boolean
         get() = InstrumentationRegistry.getArguments().getString("serviceScreenOff") == "true"
+
+    @Before fun resetControllerState() {
+        // Синглтон живёт в процессе приложения между прогонами instrument-раннеров:
+        // без сброса чужой терминальный статус отравляет ожидания cancel-сценариев.
+        AudioProcessingController.publish(AudioProcessingState())
+    }
 
     @Before fun snapshotExistingAudioDirectories() {
         preexistingAudioDirectories = audioDirectories()
@@ -45,10 +52,11 @@ class AudioProcessingServiceTest {
             await { AudioProcessingController.state.value.phase == AudioProcessingPhase.COMPLETED }
             assertEquals(1_600_000L, AudioProcessingController.state.value.sampleCount)
             assertEquals(emptyList<org.cfm.catscriptor.domain.pipeline.AsrSegment>(), AudioProcessingController.state.value.asrDraft)
-            assertTrue(AudioProcessingController.state.value.stages.filter {
-                it.stage == org.cfm.catscriptor.domain.app.ProcessingStage.DIARIZE ||
-                    it.stage == org.cfm.catscriptor.domain.app.ProcessingStage.CORRECT_TEXT
-            }.all { it.status == org.cfm.catscriptor.domain.app.StageStatus.Pending })
+            // Тишина: диаризация и коррекция завершены с пустым результатом, LLM не создавалась.
+            assertEquals(emptyList<org.cfm.catscriptor.domain.pipeline.Utterance>(), AudioProcessingController.state.value.transcript)
+            assertTrue(AudioProcessingController.state.value.stages.all {
+                it.status is org.cfm.catscriptor.domain.app.StageStatus.Done
+            })
             assertCleaned()
             if (screenOff) assertTrue("Экран снова включился до проверки завершения", isScreenOff())
             Log.i(TAG, "Подготовка WAV завершена; screenOff=$screenOff; ресурсы освобождены")
