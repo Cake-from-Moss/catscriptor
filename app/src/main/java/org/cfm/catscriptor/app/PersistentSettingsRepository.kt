@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.cfm.catscriptor.domain.app.AppSettings
+import org.cfm.catscriptor.domain.app.CorrectionLevel
 import org.cfm.catscriptor.domain.app.ExportFormat
 import org.cfm.catscriptor.domain.app.SettingsRepository
 
@@ -17,9 +18,17 @@ internal class PersistentSettingsRepository(context: Context) : SettingsReposito
             ExportFormat.valueOf(preferences.getString("exportFormat", "JSON") ?: "JSON")
         }.getOrDefault(ExportFormat.JSON),
         liveTextEnabled = preferences.getBoolean("liveTextEnabled", true),
-        textCorrectionEnabled = preferences.getBoolean("textCorrectionEnabled", true),
+        correctionLevel = readCorrectionLevel(),
     ))
     override val settings = state.asStateFlow()
+
+    /** Старый булев переключатель: включено означало 1.5B, то есть «Умная». */
+    private fun readCorrectionLevel(): CorrectionLevel {
+        preferences.getString("correctionLevel", null)?.let { saved ->
+            runCatching { CorrectionLevel.valueOf(saved) }.getOrNull()?.let { return it }
+        }
+        return if (preferences.getBoolean("textCorrectionEnabled", true)) CorrectionLevel.SMART else CorrectionLevel.OFF
+    }
 
     @Synchronized
     override fun update(transform: (AppSettings) -> AppSettings) {
@@ -29,7 +38,7 @@ internal class PersistentSettingsRepository(context: Context) : SettingsReposito
             .putInt("speakerCount", next.speakerCount ?: 0)
             .putString("exportFormat", next.defaultExportFormat.name)
             .putBoolean("liveTextEnabled", next.liveTextEnabled)
-            .putBoolean("textCorrectionEnabled", next.textCorrectionEnabled)
+            .putString("correctionLevel", next.correctionLevel.name)
             .commit()) { "Не удалось сохранить настройки" }
         state.value = next
     }

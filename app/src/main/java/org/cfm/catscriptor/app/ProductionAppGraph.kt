@@ -29,7 +29,7 @@ class ProductionAppGraph(context: Context) : AppGraph {
     private val processingImpl =
         PipelineProcessingController(context.applicationContext, store,
             speakerCount = { settings.settings.value.speakerCount },
-            textCorrectionEnabled = { settings.settings.value.textCorrectionEnabled })
+            correctionLevel = { settings.settings.value.correctionLevel })
     override val processing: ProcessingController = processingImpl
     override val recorder: RecorderController = org.cfm.catscriptor.recording.androidRecordingController(
         context, processing, saveNotes = { id, notes -> store.update(id) { it.copy(notes = notes) } },

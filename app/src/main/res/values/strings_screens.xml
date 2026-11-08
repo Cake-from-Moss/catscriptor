@@ -165,5 +165,12 @@
     <string name="settings_live_text_body">Показывать черновую расшифровку во время записи</string>
     <string name="settings_correction">Обработка текста</string>
     <string name="settings_correction_title">Пунктуация и правка</string>
-    <string name="settings_correction_body">Исправлять текст автоматически после распознавания. Если выключить, правку можно запустить позже через меню записи.</string>
+    <string name="settings_correction_help">Что это значит</string>
+    <string name="settings_correction_help_body">После распознавания встроенная нейросеть расставляет знаки препинания, заглавные буквы и исправляет очевидные ошибки. «Быстрая» работает заметно скорее, но может чаще ошибаться. «Умная» аккуратнее, но обрабатывает запись дольше и сильнее нагревает телефон. Всё происходит на устройстве, без интернета.</string>
+    <string name="settings_correction_off">Выкл</string>
+    <string name="settings_correction_fast">Быстрая</string>
+    <string name="settings_correction_smart">Умная</string>
+    <string name="settings_correction_off_body">Текст остаётся как распознан. Правку можно запустить позже через меню записи.</string>
+    <string name="settings_correction_fast_body">Быстро, подходит для простых и коротких записей.</string>
+    <string name="settings_correction_smart_body">Лучшее качество, обработка занимает больше времени.</string>
 </resources>

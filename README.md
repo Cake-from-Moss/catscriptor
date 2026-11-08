@@ -8,7 +8,7 @@ GigaAM v3 CTC int8 по ходам спикеров → слияние репл�
 готовый транскрипт со спикерами, таймкодами и исправленным текстом (`RecordingStatus.Ready`).
 Готовые записи открываются на экране транскрипта с правкой реплик и имён спикеров.
 На главном экране и в библиотеке свайп вправо раскрывает переименование, влево — удаление.
-Переключатель «Пунктуация и правка» в настройках управляет LLM-этапом первичной
+Переключатель «Пунктуация и правка» (Выкл / Быстрая / Умная) в настройках управляет LLM-этапом первичной
 обработки и по умолчанию включён. Для готовой записи без сохранённой метки успешной
 коррекции этот этап можно запустить из контекстного меню без повторного распознавания
 аудио. После успешной коррекции пункт исчезает.
@@ -156,8 +156,10 @@ Debug APK: `app/build/outputs/apk/debug/app-debug.apk`. Release APK без на�
 | Диаризация: эмбеддинги | 3D-Speaker CAM++ zh_en advanced | speaker-recongition-models | [ONNX](https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx) | `speaker-embedding-campplus-zh-en-adv/embedding.onnx` | `aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2` |
 | Лицензия диаризации | 3D-Speaker Apache-2.0 | см. манифест | `diarization-manifest.properties` | `speaker-embedding-campplus-zh-en-adv/LICENSE-3dspeaker` | см. манифест |
 | Лицензия VAD | Silero MIT | v4.0 | [LICENSE](https://raw.githubusercontent.com/snakers4/silero-vad/v4.0/LICENSE) | `silero-vad-v4-k2-fsa-9e2449e1/LICENSE` | `2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b` |
-| LLM-коррекция | Qwen2.5-1.5B-Instruct Q4_K_M | HF main | [GGUF](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf) | `qwen2.5-1.5b-instruct-q4_k_m-2026-11-07/qwen2.5-1.5b-instruct-q4_k_m.gguf` | `6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e` |
+| LLM-коррекция, уровень «Умная» | Qwen2.5-1.5B-Instruct Q4_K_M | HF main | [GGUF](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf) | `qwen2.5-1.5b-instruct-q4_k_m-2026-11-07/qwen2.5-1.5b-instruct-q4_k_m.gguf` | `6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e` |
 | Лицензия LLM | Apache-2.0 | — | [LICENSE](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/LICENSE) | `qwen2.5-1.5b-instruct-q4_k_m-2026-11-07/LICENSE` | `832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e` |
+| LLM-коррекция, уровень «Быстрая» | Qwen2.5-0.5B-Instruct Q4_K_M | HF main | [GGUF](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf) | `qwen2.5-0.5b-instruct-q4_k_m-2026-11-08/qwen2.5-0.5b-instruct-q4_k_m.gguf` | `74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db` |
+| Лицензия LLM «Быстрая» | Apache-2.0 | — | [LICENSE](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/LICENSE) | `qwen2.5-0.5b-instruct-q4_k_m-2026-11-08/LICENSE` | `832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e` |
 
 Выбран официальный AAR sherpa-onnx **2.0.1**, а не собственная сборка: Android API
 покрывает загрузку, decode, VAD и освобождение. Исследовательская сборка с экспортом

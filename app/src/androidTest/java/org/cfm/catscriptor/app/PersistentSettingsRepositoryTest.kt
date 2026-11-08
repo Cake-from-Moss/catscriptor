@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
 import androidx.test.core.app.ApplicationProvider
+import org.cfm.catscriptor.domain.app.CorrectionLevel
 import org.cfm.catscriptor.domain.app.ExportFormat
 import org.junit.Assert.*
 import org.junit.Test
@@ -21,12 +22,12 @@ class PersistentSettingsRepositoryTest {
         try {
             val changed = original.copy(language = "en", speakerCount = 3,
                 defaultExportFormat = ExportFormat.entries.first { it != original.defaultExportFormat },
-                liveTextEnabled = !original.liveTextEnabled, textCorrectionEnabled = false)
+                liveTextEnabled = !original.liveTextEnabled, correctionLevel = CorrectionLevel.FAST)
             repository.update { changed }
             assertEquals(changed, PersistentSettingsRepository(context).settings.value)
-            assertFalse(PersistentSettingsRepository(context).settings.value.textCorrectionEnabled)
-            repository.update { it.copy(textCorrectionEnabled = true) }
-            assertTrue(PersistentSettingsRepository(context).settings.value.textCorrectionEnabled)
+            assertEquals(CorrectionLevel.FAST, PersistentSettingsRepository(context).settings.value.correctionLevel)
+            repository.update { it.copy(correctionLevel = CorrectionLevel.OFF) }
+            assertEquals(CorrectionLevel.OFF, PersistentSettingsRepository(context).settings.value.correctionLevel)
             repository.update { it.copy(speakerCount = null) }
             assertNull(PersistentSettingsRepository(context).settings.value.speakerCount)
         } finally {

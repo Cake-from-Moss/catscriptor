@@ -1,5 +1,7 @@
 package org.cfm.catscriptor.app
 
+import org.cfm.catscriptor.native.models.LlamaTextCorrector
+import org.cfm.catscriptor.domain.app.CorrectionLevel
 import android.content.Context
 import android.os.SystemClock
 import java.util.UUID
@@ -44,7 +46,7 @@ internal class PipelineProcessingController(
     private val store: PipelineStore,
     /** Число спикеров из настроек, читается при старте каждой записи; null — автоопределение. */
     private val speakerCount: () -> Int? = { null },
-    private val textCorrectionEnabled: () -> Boolean = { true },
+    private val correctionLevel: () -> CorrectionLevel = { CorrectionLevel.SMART },
 ) : ProcessingController {
 
     private val dispatcher = Dispatchers.IO.limitedParallelism(1)
@@ -151,7 +153,9 @@ internal class PipelineProcessingController(
         val seed = (entry.processingState ?: AudioProcessingState()).copy(
             transcript = source, sampleCount = entry.durationMs * 16,
         )
-        AudioProcessingController.startCorrection(appContext, seed)
+        // Правка по явной просьбе при выключенной автоматической идёт на крупной модели.
+        val level = correctionLevel().takeIf { it != CorrectionLevel.OFF } ?: CorrectionLevel.SMART
+        AudioProcessingController.startCorrection(appContext, seed, level)
         // Ожидание не блокирует коллектор; старый готовый документ всё время доступен.
         completion.await()
     }
@@ -272,7 +276,7 @@ internal class PipelineProcessingController(
         store.update(next.id) {
             it.copy(status = RecordingStatus.Processing(RUN_FRACTION, ProcessingStage.PREPARE_AUDIO))
         }
-        AudioProcessingController.start(appContext, AudioInput(next.documentUri), speakerCount(), textCorrectionEnabled())
+        AudioProcessingController.start(appContext, AudioInput(next.documentUri), speakerCount(), correctionLevel())
     }
 
     /**
@@ -324,6 +328,7 @@ internal class PipelineProcessingController(
                 "vad-manifest.properties" to { stream -> BundledModelSpec.readVad(stream) },
                 "diarization-manifest.properties" to { stream -> BundledModelSpec.readDiarization(stream) },
                 LLM_MANIFEST to { stream -> BundledModelSpec.readLlm(stream) },
+                LlamaTextCorrector.FAST_MANIFEST to { stream -> BundledModelSpec.readLlm(stream) },
             )
             for ((manifest, readSpec) in manifests) {
             val spec = appContext.assets.open(manifest).use(readSpec)
@@ -342,7 +347,7 @@ internal class PipelineProcessingController(
 
     private companion object {
         const val MODEL_MANIFEST = "model-manifest.properties"
-        const val LLM_MANIFEST = "llm-manifest.properties"
+        const val LLM_MANIFEST = LlamaTextCorrector.SMART_MANIFEST
         /** Минимальная доля запущенной записи: полоса прогресса сразу показывает, что работа идёт. */
         const val RUN_FRACTION = 0.01f
     }
