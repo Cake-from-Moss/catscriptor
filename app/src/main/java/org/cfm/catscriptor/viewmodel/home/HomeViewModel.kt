@@ -140,9 +140,27 @@ class HomeViewModel(
 
     fun pauseRecording() = recorder.pause()
 
+    fun cancelRecording() {
+        viewModelScope.launch {
+            if (stoppingRecording || recorder.state.value !is RecorderState.Active) return@launch
+            stoppingRecording = true
+            suppressStopTransition = true
+            try { recorder.cancel() }
+            catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                eventChannel.send(HomeEvent.RecordingStopFailed)
+            } finally {
+                if (recorder.state.value is RecorderState.Active) suppressStopTransition = false
+                stoppingRecording = false
+            }
+        }
+    }
+
     fun resumeRecording() = recorder.resume()
 
     fun addMark() = recorder.addMark()
+    fun addNote(text: String, positionMs: Long? = null) = recorder.addNote(text, positionMs)
+    fun deleteNote(noteId: String) = recorder.deleteNote(noteId)
 
     /** Live-текст можно переключить и во время записи. */
     fun toggleLiveText() {

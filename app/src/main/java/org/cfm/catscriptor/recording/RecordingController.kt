@@ -15,7 +15,12 @@ internal interface RecordingDevice {
     fun amplitude(): Int
     fun stop()
     fun release()
+    val recordedSamples: Long? get() = null
+    val preview: PreviewState? get() = null
+    fun setLiveText(enabled: Boolean) = Unit
 }
+
+internal data class PreviewState(val lines: List<LiveLine> = emptyList(), val status: String = "", val recognizing: Boolean = false)
 
 internal interface RecordingStorage {
     fun availableBytes(): Long
@@ -23,7 +28,7 @@ internal interface RecordingStorage {
     fun uri(file: File): String
 }
 
-/** Сериализация защищает также синхронные команды UI и асинхронные ошибки MediaRecorder. */
+/** Сериализация защищает также синхронные команды UI и асинхронные ошибки захвата PCM. */
 internal class RecordingController(
     private val available: () -> Boolean,
     private val factory: () -> RecordingDevice,
@@ -32,6 +37,7 @@ internal class RecordingController(
     private val importFile: suspend (String, String) -> ImportResult,
     private val scope: CoroutineScope,
     private val supported: () -> Boolean = available,
+    private val saveNotes: suspend (String, List<RecordingNote>) -> Unit = { _, _ -> },
 ) : RecorderController {
     private val lock = Any()
     private val mutableState = MutableStateFlow<RecorderState>(RecorderState.Idle)
@@ -44,10 +50,10 @@ internal class RecordingController(
         var job: Job? = null
     }
 
-    override suspend fun start(liveText: Boolean): StartRecordingResult {
+    override suspend fun start(liveText: Boolean): StartRecordingResult = withContext(Dispatchers.IO) {
         val callerContext = currentCoroutineContext()
         callerContext.ensureActive()
-        return synchronized(lock) {
+        synchronized(lock) {
             if (session != null) return@synchronized StartRecordingResult.Unavailable
             var file: File? = null
             var device: RecordingDevice? = null
@@ -61,6 +67,7 @@ internal class RecordingController(
                 owned = active
                 session = active
                 device.start(file) { synchronized(lock) { if (session === active) discard(active) } }
+                device.setLiveText(liveText)
                 check(session === active)
                 active.since = clock()
                 callerContext.ensureActive()
@@ -84,26 +91,44 @@ internal class RecordingController(
         }
     }
 
-    override suspend fun stop(): String? {
-        val file = synchronized(lock) {
-            val active = session ?: return null
+    override suspend fun stop(): String? = withContext(NonCancellable + Dispatchers.IO) {
+        val finished = synchronized(lock) {
+            val active = session ?: return@withContext null
+            val notes = (mutableState.value as? RecorderState.Active)?.notes.orEmpty()
             session = null
             active.job?.cancel()
             mutableState.value = RecorderState.Idle
             try {
                 active.device.stop()
                 check(active.file.length() > 0)
-                active.file
+                active.file to notes
             } catch (_: Exception) {
                 active.file.delete()
                 null
             } finally { runCatching { active.device.release() } }
-        } ?: return null
+        } ?: return@withContext null
+        val (file, notes) = finished
         // Завершённая запись сохраняется даже при отмене, отказе очереди или ошибке URI.
-        return try {
-            (importFile(storage.uri(file), file.name) as? ImportResult.Accepted)?.recordingId
+        try {
+            (importFile(storage.uri(file), file.name) as? ImportResult.Accepted)?.recordingId?.also { id ->
+                if (notes.isNotEmpty()) saveNotes(id, notes)
+            }
         } catch (error: CancellationException) { throw error }
         catch (_: Exception) { null }
+    }
+
+    override suspend fun cancel() = withContext(NonCancellable + Dispatchers.IO) {
+        synchronized(lock) {
+            val active = session ?: return@synchronized
+            session = null
+            active.job?.cancel()
+            try { runCatching { active.device.stop() } }
+            finally {
+                runCatching { active.device.release() }
+                mutableState.value = RecorderState.Idle
+            }
+            check(!active.file.exists() || active.file.delete()) { "Не удалось удалить отменённую запись" }
+        }
     }
 
     override fun pause() = synchronized(lock) {
@@ -126,16 +151,26 @@ internal class RecordingController(
         }
     }
 
-    // Live-ASR здесь отсутствует: флаг не создаёт вымышленных гипотез.
-    override fun setLiveText(enabled: Boolean) = Unit
-    override fun addMark() = synchronized(lock) {
+    override fun setLiveText(enabled: Boolean) = synchronized(lock) { session?.device?.setLiveText(enabled); Unit }
+    override fun addMark() = addNote("")
+    override fun addNote(text: String, positionMs: Long?) = synchronized(lock) {
         val active = session ?: return@synchronized
         val state = mutableState.value as? RecorderState.Active ?: return@synchronized
-        mutableState.value = state.copy(marksMs = state.marksMs + elapsed(active))
+        val now = elapsed(active)
+        val note = RecordingNote(java.util.UUID.randomUUID().toString(),
+            positionMs?.coerceIn(0, now) ?: now, text.trim().take(2_000))
+        val notes = (state.notes + note).sortedBy { it.positionMs }
+        mutableState.value = state.copy(marksMs = notes.map { it.positionMs }, notes = notes)
     }
 
-    private fun elapsed(active: Session) = active.elapsed +
-        if (active.paused) 0 else (clock() - active.since).coerceAtLeast(0)
+    override fun deleteNote(noteId: String) = synchronized(lock) {
+        val state = mutableState.value as? RecorderState.Active ?: return@synchronized
+        val notes = state.notes.filterNot { it.id == noteId }
+        mutableState.value = state.copy(notes = notes, marksMs = notes.map { it.positionMs })
+    }
+
+    private fun elapsed(active: Session) = active.device.recordedSamples?.let { it * 1000 / 16000 }
+        ?: (active.elapsed + if (active.paused) 0 else (clock() - active.since).coerceAtLeast(0))
 
     private fun tick(active: Session) = operate(active) {
         if (storage.availableBytes() < RESERVE_BYTES) {
@@ -152,9 +187,13 @@ internal class RecordingController(
 
     private fun publish(active: Session, db: Float) {
         val previous = mutableState.value as? RecorderState.Active ?: return
-        // maxAmplitude — пик за интервал опроса, не PCM RMS. VAD нет: «Тишина» не симулируется.
+        val live = active.device.preview
+        // Пик PCM не равен RMS и не подменяет результат отдельной ветки Silero.
         mutableState.value = previous.copy(elapsedMs = elapsed(active), paused = active.paused,
-            levelDbfs = db, peakDbfs = db, speechDetected = true)
+            levelDbfs = db, peakDbfs = db, speechDetected = true,
+            liveLines = live?.lines ?: previous.liveLines,
+            liveStatus = live?.status ?: previous.liveStatus,
+            liveRecognizing = live?.recognizing ?: false)
     }
 
     private inline fun operate(active: Session, block: () -> Unit) {

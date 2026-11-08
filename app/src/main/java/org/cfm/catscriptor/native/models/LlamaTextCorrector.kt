@@ -173,6 +173,12 @@ class LlamaTextCorrector internal constructor(
     companion object {
         private val WHITESPACE = Regex("\\s+")
 
+        /** Крупная модель (Qwen2.5-1.5B): уровень «Умная». */
+        const val SMART_MANIFEST = "llm-manifest.properties"
+
+        /** Малая модель (Qwen2.5-0.5B): уровень «Быстрая». */
+        const val FAST_MANIFEST = "llm-fast-manifest.properties"
+
         /**
          * Android-фабрика: читает llm-manifest, копирует GGUF с проверкой SHA-256 во внутреннее
          * хранилище (однократно, повторно не копируется) и отдаёт путь к файлу.
@@ -181,12 +187,13 @@ class LlamaTextCorrector internal constructor(
             context: Context,
             config: LlamaConfig = LlamaConfig(),
             guard: CorrectionGuard = CorrectionGuard(),
+            manifest: String = SMART_MANIFEST,
         ): LlamaTextCorrector {
             val appContext = context.applicationContext
             val assets = appContext.assets
             val store = BundledModelStore(File(appContext.noBackupFilesDir, "models")) { assets.open(it) }
             val openModel: (checkCancelled: () -> Unit) -> File = { checkCancelled ->
-                val spec = assets.open("llm-manifest.properties").use { BundledModelSpec.readLlm(it) }
+                val spec = assets.open(manifest).use { BundledModelSpec.readLlm(it) }
                 val directory = store.prepare(spec, checkCancelled)
                 File(directory, spec.files.single { it.name.endsWith(".gguf") }.name)
             }

@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,17 +34,29 @@ import kotlinx.coroutines.withContext
 import org.cfm.catscriptor.R
 import org.cfm.catscriptor.app.AppGraph
 import org.cfm.catscriptor.ui.navigation.AppNavigator
+import org.cfm.catscriptor.ui.recordings.CorrectionDialog
 import org.cfm.catscriptor.ui.navigation.LocalAppSnackbar
 import org.cfm.catscriptor.ui.navigation.TopTab
+import org.cfm.catscriptor.viewmodel.home.HomeContent
 import org.cfm.catscriptor.viewmodel.home.HomeEvent
 import org.cfm.catscriptor.viewmodel.home.HomeViewModel
+import org.cfm.catscriptor.domain.app.RecordingSummary
+import org.cfm.catscriptor.ui.recordings.TextInputDialog
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 
 /**
  * Связывает главный экран с графом: ViewModel, системные диалоги (разрешение на микрофон,
  * выбор файла) и Snackbar. Решений о данных здесь нет, только Android-обвязка.
  */
 @Composable
-fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest: Int) {
+fun HomeRoute(
+    graph: AppGraph,
+    navigator: AppNavigator,
+    processingDetailsRequest: Int,
+    onDetailsShownChange: (Boolean) -> Unit = {},
+) {
     val viewModel = viewModel { HomeViewModel(graph.recordings, graph.processing, graph.recorder, graph.settings) }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val signal = viewModel.signal.collectAsStateWithLifecycle()
@@ -51,6 +64,14 @@ fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest
     val resources = LocalResources.current
     val snackbar = LocalAppSnackbar.current
     val scope = rememberCoroutineScope()
+    var renameTarget by remember { mutableStateOf<RecordingSummary?>(null) }
+    var correctionTarget by remember { mutableStateOf<RecordingSummary?>(null) }
+    var correctingId by remember { mutableStateOf<String?>(null) }
+
+    // Пока открыта развёрнутая карточка обработки, нижняя плашка прогресса не нужна.
+    val detailsShown = state.content is HomeContent.ProcessingDetail
+    LaunchedEffect(detailsShown) { onDetailsShownChange(detailsShown) }
+    DisposableEffect(Unit) { onDispose { onDetailsShownChange(false) } }
 
     LaunchedEffect(processingDetailsRequest) { viewModel.onDetailsRequest(processingDetailsRequest) }
 
@@ -98,7 +119,7 @@ fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest
         }
     }
 
-    val actions = remember(viewModel, navigator) {
+    val actions = remember(viewModel, navigator, correctingId) {
         HomeActions(
             onRecord = {
                 when {
@@ -111,11 +132,30 @@ fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest
                 }
             },
             onStop = viewModel::stopRecording,
+            onCancelRecording = viewModel::cancelRecording,
+            onDeleteRecording = { id ->
+                scope.launch {
+                    try {
+                        graph.recordings.delete(id)
+                        snackbar.show(
+                            message = "Запись удалена", actionLabel = "Отменить", timeoutMs = 5_000,
+                            onAction = { scope.launch { graph.recordings.restore(id) } },
+                        )
+                    } catch (error: Exception) {
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        snackbar.show("Не удалось удалить запись")
+                    }
+                }
+            },
+            onRenameRecording = { renameTarget = it },
+            onCorrectText = { if (correctingId == null) correctionTarget = it },
             onToggleLiveText = viewModel::toggleLiveText,
             onUploadFile = { importLauncher.launch(arrayOf(AUDIO_MIME)) },
             onPause = viewModel::pauseRecording,
             onResume = viewModel::resumeRecording,
             onAddMark = viewModel::addMark,
+            onAddNote = { text, positionMs -> viewModel.addNote(text, positionMs) },
+            onDeleteNote = viewModel::deleteNote,
             onOpenSettings = navigator.openSettings,
             onOpenRecording = navigator.openTranscript,
             onOpenAllRecordings = { navigator.openTab(TopTab.RECORDINGS) },
@@ -133,6 +173,42 @@ fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest
         micAccess = micAccess,
         actions = actions,
     )
+
+    renameTarget?.let { recording ->
+        TextInputDialog(
+            title = "Переименовать запись",
+            label = "Название",
+            initialValue = recording.title,
+            onConfirm = { title ->
+                renameTarget = null
+                scope.launch {
+                    try { graph.recordings.rename(recording.id, title) }
+                    catch (error: kotlinx.coroutines.CancellationException) { throw error }
+                    catch (error: Exception) { snackbar.show(error.message ?: "Не удалось переименовать запись") }
+                }
+            },
+            onDismiss = { renameTarget = null },
+        )
+    }
+    correctionTarget?.let { recording ->
+        CorrectionDialog(
+            defaultLevel = graph.settings.settings.value.correctionLevel,
+            onDismiss = { correctionTarget = null },
+            onConfirm = { level ->
+                correctionTarget = null
+                correctingId = recording.id
+                scope.launch {
+                    snackbar.show(message = "Пунктуация и правка запущены")
+                    try {
+                        graph.processing.correctText(recording.id, level)
+                        snackbar.show(message = "Текст обновлён")
+                    } catch (error: kotlinx.coroutines.CancellationException) { throw error }
+                    catch (error: Exception) { snackbar.show(message = error.message ?: "Не удалось исправить текст") }
+                    finally { correctingId = null }
+                }
+            },
+        )
+    }
 }
 
 private const val AUDIO_MIME = "audio/*"

@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +55,7 @@ import org.cfm.catscriptor.ui.theme.StenografType
 import org.cfm.catscriptor.viewmodel.home.HomeContent
 import org.cfm.catscriptor.viewmodel.home.HomeUiState
 import org.cfm.catscriptor.viewmodel.home.RecorderSignal
+import org.cfm.catscriptor.domain.app.RecordingSummary
 
 /** Действия главного экрана; реализации подставляет [HomeRoute]. */
 class HomeActions(
@@ -65,6 +66,8 @@ class HomeActions(
     val onPause: () -> Unit,
     val onResume: () -> Unit,
     val onAddMark: () -> Unit,
+    val onAddNote: (String, Long?) -> Unit = { _, _ -> },
+    val onDeleteNote: (String) -> Unit = {},
     val onOpenSettings: () -> Unit,
     val onOpenRecording: (String) -> Unit,
     val onOpenAllRecordings: () -> Unit,
@@ -73,6 +76,10 @@ class HomeActions(
     val onCancelJob: (String) -> Unit,
     val onRetryJob: (String) -> Unit,
     val onSkipStage: (String, ProcessingStage) -> Unit,
+    val onCancelRecording: () -> Unit = {},
+    val onDeleteRecording: (String) -> Unit = {},
+    val onRenameRecording: (RecordingSummary) -> Unit = {},
+    val onCorrectText: (RecordingSummary) -> Unit = {},
 )
 
 /**
@@ -89,6 +96,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
 ) {
     var showModelsDetails by rememberSaveable { mutableStateOf(false) }
+    var showCancelRecording by rememberSaveable { mutableStateOf(false) }
     val recording = state.recording
 
     // Последний элемент должен докручиваться выше плавающей навигации: её высота + отступы.
@@ -122,6 +130,19 @@ fun HomeScreen(
             modifier = Modifier.padding(horizontal = StenografDimens.ScreenPadding),
         )
         Spacer(Modifier.height(8.dp))
+        if (recording != null) {
+            RecordingNotes(
+                notes = recording.notes,
+                signal = signal,
+                onAddNote = actions.onAddNote,
+                onAddMark = actions.onAddMark,
+                onDeleteNote = actions.onDeleteNote,
+                modifier = Modifier.padding(horizontal = StenografDimens.ScreenPadding),
+            )
+            TextButton(onClick = { showCancelRecording = true }, modifier = Modifier.align(Alignment.End)) {
+                Text("Отменить запись", color = MaterialTheme.colorScheme.error)
+            }
+        }
 
         AnimatedContent(
             targetState = state.content,
@@ -142,6 +163,9 @@ fun HomeScreen(
                     onExpandJob = actions.onExpandJob,
                     onOpenRecording = actions.onOpenRecording,
                     onOpenAllRecordings = actions.onOpenAllRecordings,
+                    onDeleteRecording = actions.onDeleteRecording,
+                    onRenameRecording = actions.onRenameRecording,
+                    onCorrectText = actions.onCorrectText,
                 )
                 is HomeContent.ProcessingDetail -> ProcessingDetail(
                     job = content.job,
@@ -156,18 +180,30 @@ fun HomeScreen(
                     lines = content.lines,
                     contentPadding = contentPadding,
                     jumpButtonBottomPadding = overlayHeight + 12.dp,
+                    status = content.status,
+                    recognizing = content.recognizing,
                 )
                 is HomeContent.RecordingWithoutLive -> RecordingPanel(
-                    marksMs = content.marksMs,
                     paused = recording?.paused == true,
                     signal = signal,
                     contentPadding = contentPadding,
-                    onAddMark = actions.onAddMark,
                 )
             }
         }
     }
 
+    if (showCancelRecording && recording != null) {
+        AlertDialog(
+            onDismissRequest = { showCancelRecording = false },
+            title = { Text("Отменить запись?") },
+            text = { Text("Записанное аудио и Live-расшифровка будут удалены. Это действие нельзя отменить.") },
+            dismissButton = { TextButton(onClick = { showCancelRecording = false }) { Text("Продолжить запись") } },
+            confirmButton = { TextButton(onClick = {
+                showCancelRecording = false
+                actions.onCancelRecording()
+            }) { Text("Удалить запись", color = MaterialTheme.colorScheme.error) } },
+        )
+    }
     if (showModelsDetails) {
         AlertDialog(
             onDismissRequest = { showModelsDetails = false },
@@ -185,6 +221,7 @@ fun HomeScreen(
         )
     }
 }
+
 
 @Composable
 private fun HomeHeader(onOpenSettings: () -> Unit) {

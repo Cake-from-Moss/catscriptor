@@ -5,6 +5,8 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,6 +37,7 @@ fun TranscriptRoute(graph: AppGraph, navigator: AppNavigator, recordingId: Strin
     val clipboard = LocalClipboard.current
     val snackbar = LocalAppSnackbar.current
     val scope = rememberCoroutineScope()
+    var correcting by remember { mutableStateOf(false) }
     val copiedMessage = stringResource(R.string.transcript_copied)
 
     // Освобождение плеера — в TranscriptViewModel.onCleared: при повороте экран уходит из композиции,
@@ -44,7 +47,7 @@ fun TranscriptRoute(graph: AppGraph, navigator: AppNavigator, recordingId: Strin
     // Назад сначала закрывает поиск, и только потом экран.
     BackHandler(enabled = state.searchOpen, onBack = viewModel::onSearchClose)
 
-    val actions = remember(viewModel, navigator) {
+    val actions = remember(viewModel, navigator, correcting) {
         TranscriptActions(
             onBack = navigator.back,
             onShare = viewModel::onExportOpen,
@@ -58,6 +61,22 @@ fun TranscriptRoute(graph: AppGraph, navigator: AppNavigator, recordingId: Strin
             onLineLongPress = viewModel::onLineLongPress,
             onUserScroll = viewModel::onUserScroll,
             onReturnToCurrent = viewModel::onReturnToCurrent,
+            onSaveNote = viewModel::saveNote,
+            onDeleteNote = viewModel::deleteNote,
+            defaultCorrectionLevel = graph.settings.settings.value.correctionLevel,
+            onCorrectText = { level ->
+                if (correcting) return@TranscriptActions
+                correcting = true
+                scope.launch {
+                    snackbar.show(message = "Пунктуация и правка запущены")
+                    try {
+                        graph.processing.correctText(recordingId, level)
+                        snackbar.show(message = "Текст обновлён")
+                    } catch (error: kotlinx.coroutines.CancellationException) { throw error }
+                    catch (error: Exception) { snackbar.show(message = error.message ?: "Не удалось исправить текст") }
+                    finally { correcting = false }
+                }
+            },
             player = PlayerActions(
                 onPlayPause = viewModel::onPlayPause,
                 onSeek = viewModel::onSeek,
@@ -122,5 +141,18 @@ fun TranscriptRoute(graph: AppGraph, navigator: AppNavigator, recordingId: Strin
         ScopedViewModels(key = "export-$recordingId") {
             ExportSheetRoute(graph = graph, recordingId = recordingId, onDismiss = viewModel::onExportDismiss)
         }
+    }
+
+    state.noteError?.let { message ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = viewModel::dismissNoteError,
+            title = { androidx.compose.material3.Text("Не удалось сохранить пометку") },
+            text = { androidx.compose.material3.Text(message) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = viewModel::dismissNoteError) {
+                    androidx.compose.material3.Text("Понятно")
+                }
+            },
+        )
     }
 }

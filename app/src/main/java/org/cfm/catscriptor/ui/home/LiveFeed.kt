@@ -81,6 +81,8 @@ internal fun LiveFeed(
     lines: List<LiveLine>,
     contentPadding: PaddingValues,
     jumpButtonBottomPadding: Dp,
+    status: String = "",
+    recognizing: Boolean = false,
 ) {
     val listState = rememberLazyListState()
     var follow by remember { mutableStateOf(true) }
@@ -103,6 +105,7 @@ internal fun LiveFeed(
 
     // Реплики, которые уже были на экране при входе, появляются без анимации.
     val animatedIds = remember { lines.mapTo(HashSet()) { it.id } }
+    LaunchedEffect(lines) { animatedIds.retainAll(lines.mapTo(HashSet()) { it.id }) }
     val lastText = lines.lastOrNull()?.text
     LaunchedEffect(lines.size, lastText, follow) {
         if (follow && lines.isNotEmpty()) scrollToEnd(listState, lines.lastIndex)
@@ -110,6 +113,13 @@ internal fun LiveFeed(
 
     Column(Modifier.fillMaxSize()) {
         LiveHeader(Modifier.padding(horizontal = 16.dp))
+        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (recognizing) {
+                androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(status, style = StenografType.meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
@@ -234,7 +244,7 @@ private fun LiveLineItem(line: LiveLine, animateEnter: Boolean) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                speakerLabel(line.speakerId),
+                if (line.speakerId.isBlank()) "Речь" else speakerLabel(line.speakerId),
                 style = StenografType.timecode.copy(fontWeight = FontWeight.Medium),
                 color = speaker.onContainer,
                 modifier = Modifier

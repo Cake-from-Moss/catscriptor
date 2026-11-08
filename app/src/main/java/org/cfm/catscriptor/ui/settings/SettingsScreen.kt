@@ -24,17 +24,30 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import org.cfm.catscriptor.R
+import org.cfm.catscriptor.domain.app.CorrectionLevel
 import org.cfm.catscriptor.domain.app.ExportFormat
 import org.cfm.catscriptor.domain.app.ModelsStatus
 import org.cfm.catscriptor.ui.components.AppIcons
@@ -51,6 +64,7 @@ class SettingsActions(
     val onSpeakerCountChange: (Int?) -> Unit,
     val onExportFormatChange: (ExportFormat) -> Unit,
     val onLiveTextChange: (Boolean) -> Unit,
+    val onCorrectionLevelChange: (CorrectionLevel) -> Unit = {},
 )
 
 @Composable
@@ -85,14 +99,7 @@ fun SettingsScreen(state: SettingsUiState, actions: SettingsActions, modifier: M
                 }
             }
             section(R.string.settings_speakers) {
-                SPEAKER_COUNT_OPTIONS.forEach { count ->
-                    RadioItem(
-                        title = if (count == null) stringResource(R.string.settings_speakers_auto) else speakersCountLabel(count),
-                        supporting = if (count == null) stringResource(R.string.settings_speakers_auto_body) else null,
-                        selected = state.settings.speakerCount == count,
-                        onSelect = { actions.onSpeakerCountChange(count) },
-                    )
-                }
+                SpeakerCountItem(state.settings.speakerCount, actions.onSpeakerCountChange)
             }
             section(R.string.settings_export) {
                 ExportFormat.entries.forEach { format ->
@@ -122,6 +129,9 @@ fun SettingsScreen(state: SettingsUiState, actions: SettingsActions, modifier: M
                         onValueChange = actions.onLiveTextChange,
                     ),
                 )
+            }
+            section(R.string.settings_correction, divider = false) {
+                CorrectionLevelItem(state.settings.correctionLevel, actions.onCorrectionLevelChange)
             }
         }
     }
@@ -196,4 +206,112 @@ private fun languageName(code: String): String = when (code) {
 private fun languageNote(code: String): String? = when (code) {
     "ru" -> stringResource(R.string.settings_language_ru_body)
     else -> null
+}
+
+/**
+ * Слайдер «Авто, 1…5»: крайнее левое положение — авто (null). Во время перетаскивания значение
+ * держится локально, а в настройки пишется один раз при отпускании, чтобы не дёргать хранилище.
+ */
+@Composable
+private fun SpeakerCountItem(selected: Int?, onChange: (Int?) -> Unit) {
+    val options = SPEAKER_COUNT_OPTIONS
+    val savedIndex = options.indexOf(selected).coerceAtLeast(0)
+    var dragIndex by remember(savedIndex) { mutableFloatStateOf(savedIndex.toFloat()) }
+    val current = options[dragIndex.roundToInt().coerceIn(0, options.lastIndex)]
+    Column(Modifier.padding(horizontal = StenografDimens.ScreenPadding, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.settings_speakers_title),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (current == null) stringResource(R.string.settings_speakers_auto) else current.toString(),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        val sliderLabel = stringResource(R.string.settings_speakers)
+        Slider(
+            value = dragIndex,
+            onValueChange = { dragIndex = it },
+            onValueChangeFinished = { onChange(current) },
+            valueRange = 0f..options.lastIndex.toFloat(),
+            steps = options.size - 2,
+            modifier = Modifier.semantics {
+                contentDescription = sliderLabel
+                stateDescription = current?.let { it.toString() } ?: "авто"
+            },
+        )
+        Text(
+            if (current == null) stringResource(R.string.settings_speakers_auto_body) else speakersCountLabel(current),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Три положения: выкл → быстрая → умная; пояснение раскрывается по значку «?». */
+@Composable
+private fun CorrectionLevelItem(selected: CorrectionLevel, onSelect: (CorrectionLevel) -> Unit) {
+    var helpShown by remember { mutableStateOf(false) }
+    Column(Modifier.padding(horizontal = StenografDimens.ScreenPadding, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.settings_correction_title),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = { helpShown = !helpShown }) {
+                Icon(AppIcons.Info, contentDescription = stringResource(R.string.settings_correction_help))
+            }
+        }
+        if (helpShown) {
+            Text(
+                stringResource(R.string.settings_correction_help_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+        val levels = CorrectionLevel.entries
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            levels.forEachIndexed { index, level ->
+                SegmentedButton(
+                    selected = level == selected,
+                    onClick = { onSelect(level) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = levels.size),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        activeContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    ),
+                    modifier = Modifier.height(48.dp),
+                ) {
+                    Text(
+                        stringResource(
+                            when (level) {
+                                CorrectionLevel.OFF -> R.string.settings_correction_off
+                                CorrectionLevel.FAST -> R.string.settings_correction_fast
+                                CorrectionLevel.SMART -> R.string.settings_correction_smart
+                            },
+                        ),
+                    )
+                }
+            }
+        }
+        Text(
+            stringResource(
+                when (selected) {
+                    CorrectionLevel.OFF -> R.string.settings_correction_off_body
+                    CorrectionLevel.FAST -> R.string.settings_correction_fast_body
+                    CorrectionLevel.SMART -> R.string.settings_correction_smart_body
+                },
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+    }
 }

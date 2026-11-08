@@ -17,6 +17,7 @@ class DiarizedDraftRunnerTest {
         val correctorFailure: Exception? = null,
         /** Ответы корректора по startMs реплики; null — вернуть текст без изменений. */
         val corrections: Map<Long, String> = emptyMap(),
+        val textCorrectionEnabled: Boolean = true,
     ) {
         val events = mutableListOf<String>()
         val states = mutableListOf<AudioProcessingState>()
@@ -75,11 +76,25 @@ class DiarizedDraftRunnerTest {
                 }
             },
             clock = { 100L },
+            textCorrectionEnabled = textCorrectionEnabled,
         )
         suspend fun run() = runner.run(AudioInput("content://test/audio"), states::add)
     }
 
     private fun spk(id: Int, start: Long, end: Long) = SpeakerSegment("speaker_$id", TimeRange(start, end))
+
+    @Test fun disabledCorrectionCompletesWithRawSpeakerTranscriptWithoutLoadingLlm() = runBlocking {
+        val fixture = Fixture(
+            speech = listOf(SpeechSegment(TimeRange(1_000, 3_000))),
+            speakers = listOf(spk(1, 1_000, 3_000)),
+            textCorrectionEnabled = false,
+        )
+        val result = fixture.run()
+        assertEquals(AudioProcessingPhase.COMPLETED, result.phase)
+        assertEquals(result.speakerDraft, result.transcript)
+        assertFalse(fixture.events.contains("corrector.create"))
+        assertEquals(StageStatus.Skipped, result.stages.single { it.stage == ProcessingStage.CORRECT_TEXT }.status)
+    }
 
     @Test fun modelsAreLoadedOneAtATimeAndClosedBeforeTheNextStage() = runBlocking {
         val fixture = Fixture(
@@ -90,7 +105,7 @@ class DiarizedDraftRunnerTest {
         val result = fixture.run()
         assertEquals(listOf("decode", "vad.create", "vad.close", "diarizer.create", "diarizer.diarize", "diarizer.close",
             "asr.create", "asr.transcribe", "asr.transcribe", "asr.close",
-            "corrector.create", "corrector.correct", "corrector.correct", "corrector.close", "pcm.close"), fixture.events)
+            "pcm.close", "corrector.create", "corrector.correct", "corrector.correct", "corrector.close"), fixture.events)
         // Один VAD-сегмент с двумя говорящими даёт два отдельных ASR-вызова по ходам, без деления текста.
         assertEquals(listOf(TimeRange(1_000, 3_000), TimeRange(3_000, 6_000)), fixture.transcribed)
         assertEquals(listOf("speaker_1", "speaker_2"), result.speakerDraft!!.map { it.speakerId })
@@ -147,7 +162,7 @@ class DiarizedDraftRunnerTest {
         val fixture = Fixture(listOf(SpeechSegment(TimeRange(0, 5_000))), listOf(spk(1, 0, 5_000)),
             correctorFailure = IllegalStateException("llm native"))
         assertThrows(IllegalStateException::class.java) { runBlocking { fixture.run() } }
-        assertEquals(listOf("corrector.create", "corrector.correct", "corrector.close", "pcm.close"),
+        assertEquals(listOf("pcm.close", "corrector.create", "corrector.correct", "corrector.close"),
             fixture.events.takeLast(4))
         assertTrue(fixture.states.last().stages.any { it.stage == ProcessingStage.CORRECT_TEXT && it.status is StageStatus.Failed })
         assertNull(fixture.states.last().transcript)

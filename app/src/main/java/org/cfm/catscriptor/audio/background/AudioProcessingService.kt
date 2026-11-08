@@ -5,6 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import org.cfm.catscriptor.domain.app.CorrectionLevel
+import org.cfm.catscriptor.native.models.LlamaTextCorrector
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -47,7 +49,8 @@ class AudioProcessingService : Service() {
             return START_NOT_STICKY
         }
         if (job != null) return START_NOT_STICKY
-        if (intent?.action != ACTION_START || intent.data == null) {
+        val correctionOnly = intent?.action == ACTION_CORRECT_TEXT
+        if (!correctionOnly && (intent?.action != ACTION_START || intent.data == null)) {
             if (AudioProcessingController.state.value.phase == AudioProcessingPhase.RUNNING) {
                 AudioProcessingController.publish(AudioProcessingState(AudioProcessingPhase.FAILED,
                     message = "Не удалось запустить подготовку: отсутствует аудиодокумент"))
@@ -61,7 +64,7 @@ class AudioProcessingService : Service() {
             val type = if (Build.VERSION.SDK_INT >= 35) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
                 else ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             // Разрешение уведомлений не является условием запуска foreground service.
-            startForeground(NOTIFICATION_ID, notification(ProcessingStage.PREPARE_AUDIO), type)
+            startForeground(NOTIFICATION_ID, notification(if (correctionOnly) ProcessingStage.CORRECT_TEXT else ProcessingStage.PREPARE_AUDIO), type)
             // Уведомление повторяет текущий этап; без разрешения POST_NOTIFICATIONS notify() молча игнорируется.
             notificationJob = scope.launch {
                 AudioProcessingController.state
@@ -73,23 +76,37 @@ class AudioProcessingService : Service() {
             wakeLock = getSystemService(PowerManager::class.java)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:audioPreparation")
                 .apply { acquire(6 * 60 * 60 * 1000L) }
-            val input = AudioInput(intent.data.toString())
+            val input = AudioInput(intent?.data.toString())
+            val correctionSeed = AudioProcessingController.state.value
             // Отсутствующий или неположительный extra — режим «авто».
-            val speakerCount = intent.getIntExtra(EXTRA_SPEAKER_COUNT, 0).takeIf { it > 0 }
+            val speakerCount = intent?.getIntExtra(EXTRA_SPEAKER_COUNT, 0)?.takeIf { it > 0 }
+            val correctionLevel = runCatching { CorrectionLevel.valueOf(intent?.getStringExtra(EXTRA_CORRECTION_LEVEL).orEmpty()) }
+                .getOrDefault(CorrectionLevel.SMART)
+            val manifest = if (correctionLevel == CorrectionLevel.FAST) LlamaTextCorrector.FAST_MANIFEST else LlamaTextCorrector.SMART_MANIFEST
             // Входим в try/finally до возврата из onStartCommand даже при немедленном уничтожении.
             job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
                 var outcome = AudioProcessingState(AudioProcessingPhase.CANCELLED, message = cancellationMessage)
                 try {
                     outcome = withContext(Dispatchers.IO) {
-                        DiarizedDraftRunner(AndroidAudioDecoder(this@AudioProcessingService),
-                            { org.cfm.catscriptor.native.models.SherpaVoiceActivityDetector(this@AudioProcessingService) },
-                            { org.cfm.catscriptor.native.models.SherpaDiarizationBackend(this@AudioProcessingService, speakerCount) },
-                            { org.cfm.catscriptor.native.models.SherpaTranscriptionBackend(this@AudioProcessingService) },
-                            org.cfm.catscriptor.domain.pipeline.DefaultUtteranceMerger(),
-                            { org.cfm.catscriptor.native.models.LlamaTextCorrector.create(this@AudioProcessingService) },
-                            android.os.SystemClock::elapsedRealtime,
-                            logTiming = { android.util.Log.i("PipelineTiming", it) },
-                        ).run(input, AudioProcessingController::publish)
+                        org.cfm.catscriptor.native.models.ModelExecutionGate.finalPipeline {
+                            if (correctionOnly) {
+                                TextCorrectionRunner(
+                                    { LlamaTextCorrector.create(this@AudioProcessingService, manifest = manifest) },
+                                    android.os.SystemClock::elapsedRealtime,
+                                ).run(correctionSeed, AudioProcessingController::publish)
+                            } else {
+                                DiarizedDraftRunner(AndroidAudioDecoder(this@AudioProcessingService),
+                                    { org.cfm.catscriptor.native.models.SherpaVoiceActivityDetector(this@AudioProcessingService) },
+                                    { org.cfm.catscriptor.native.models.SherpaDiarizationBackend(this@AudioProcessingService, speakerCount) },
+                                    { org.cfm.catscriptor.native.models.SherpaTranscriptionBackend(this@AudioProcessingService) },
+                                    org.cfm.catscriptor.domain.pipeline.DefaultUtteranceMerger(),
+                                    { LlamaTextCorrector.create(this@AudioProcessingService, manifest = manifest) },
+                                    android.os.SystemClock::elapsedRealtime,
+                                    logTiming = { android.util.Log.i("PipelineTiming", it) },
+                                    textCorrectionEnabled = correctionLevel != CorrectionLevel.OFF,
+                                ).run(input, AudioProcessingController::publish)
+                            }
+                        }
                     }
                     ensureActive()
                 } catch (_: CancellationException) {
@@ -171,7 +188,9 @@ class AudioProcessingService : Service() {
 
     companion object {
         internal const val ACTION_START = "org.cfm.catscriptor.audio.START"
+        internal const val ACTION_CORRECT_TEXT = "org.cfm.catscriptor.audio.CORRECT_TEXT"
         internal const val EXTRA_SPEAKER_COUNT = "org.cfm.catscriptor.audio.SPEAKER_COUNT"
+        internal const val EXTRA_CORRECTION_LEVEL = "org.cfm.catscriptor.audio.CORRECTION_LEVEL"
         internal const val ACTION_CANCEL = "org.cfm.catscriptor.audio.CANCEL"
         private const val CHANNEL = "audio_preparation"
         private const val NOTIFICATION_ID = 1001

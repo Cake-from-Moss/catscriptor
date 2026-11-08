@@ -1,12 +1,14 @@
 package org.cfm.catscriptor.ui.export
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.core.net.toUri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -101,11 +103,10 @@ fun ExportSheetRoute(graph: AppGraph, recordingId: String, onDismiss: () -> Unit
         chooser = stringResource(R.string.export_chooser),
     )
 
-    // Контракт пересоздаётся только при смене MIME, иначе лаунчер перерегистрировался бы
-    // на каждой рекомпозиции.
-    val mimeType = viewModel.mimeType()
-    val contract = remember(mimeType) { ActivityResultContracts.CreateDocument(mimeType) }
-    val createDocument = rememberLauncherForActivityResult(contract) { uri ->
+    // rememberLauncherForActivityResult регистрирует контракт один раз, поэтому MIME нельзя
+    // зашивать в сам контракт: иначе после смены формата/опции аудио в диалог уходит старый тип
+    // и система дописывает лишнее расширение (.zip.json). MIME едет во входных данных.
+    val createDocument = rememberLauncherForActivityResult(CreateDocumentWithType) { uri ->
         viewModel.onSaveTarget(uri?.toString())
     }
 
@@ -147,10 +148,23 @@ fun ExportSheetRoute(graph: AppGraph, recordingId: String, onDismiss: () -> Unit
             onFormatChange = viewModel::onFormatChange,
             onSpeakerNamesChange = viewModel::onSpeakerNamesChange,
             onIncludeAudioChange = viewModel::onIncludeAudioChange,
+            onAudioOnlyChange = viewModel::onAudioOnlyChange,
             onShare = viewModel::onShare,
-            onSave = { createDocument.launch(viewModel.suggestedFileName()) },
+            onSave = { createDocument.launch(viewModel.suggestedFileName() to viewModel.mimeType()) },
         )
     }
+}
+
+/** Вход: имя файла и MIME-тип. */
+private object CreateDocumentWithType : ActivityResultContract<Pair<String, String>, Uri?>() {
+    override fun createIntent(context: Context, input: Pair<String, String>): Intent =
+        Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType(input.second)
+            .putExtra(Intent.EXTRA_TITLE, input.first)
+
+    override fun parseResult(resultCode: Int, intent: Intent?): Uri? =
+        intent.takeIf { resultCode == Activity.RESULT_OK }?.data
 }
 
 /** Строки берутся в композиции заранее: обработчики событий работают вне неё. */
@@ -199,6 +213,7 @@ fun ExportSheetContent(
     onFormatChange: (ExportFormat) -> Unit,
     onSpeakerNamesChange: (Boolean) -> Unit,
     onIncludeAudioChange: (Boolean) -> Unit,
+    onAudioOnlyChange: (Boolean) -> Unit,
     onShare: () -> Unit,
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
@@ -221,11 +236,13 @@ fun ExportSheetContent(
             overflow = TextOverflow.Ellipsis,
         )
 
-        SectionLabel(stringResource(R.string.export_format))
-        FormatSelector(selected = state.options.format, onSelect = onFormatChange)
+        if (!state.options.audioOnly) {
+            SectionLabel(stringResource(R.string.export_format))
+            FormatSelector(selected = state.options.format, onSelect = onFormatChange)
 
-        SectionLabel(stringResource(R.string.export_preview))
-        PreviewBlock(state.preview)
+            SectionLabel(stringResource(R.string.export_preview))
+            PreviewBlock(state.preview)
+        }
 
         Spacer(Modifier.height(12.dp))
         SwitchRow(
@@ -238,9 +255,16 @@ fun ExportSheetContent(
         SwitchRow(
             title = stringResource(R.string.export_with_audio),
             supporting = null,
-            checked = state.options.includeAudio,
-            enabled = true,
+            checked = state.options.includeAudio && !state.options.audioOnly,
+            enabled = !state.options.audioOnly,
             onCheckedChange = onIncludeAudioChange,
+        )
+        SwitchRow(
+            title = stringResource(R.string.export_audio_only),
+            supporting = null,
+            checked = state.options.audioOnly,
+            enabled = true,
+            onCheckedChange = onAudioOnlyChange,
         )
 
         Spacer(Modifier.height(16.dp))

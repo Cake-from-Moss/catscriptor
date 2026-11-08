@@ -1,11 +1,10 @@
 package org.cfm.catscriptor.ui.navigation
 
-import android.app.Activity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
@@ -38,7 +37,7 @@ class ScopedViewModelStores : ViewModel() {
  */
 @Composable
 fun ScopedViewModels(key: String, content: @Composable () -> Unit) {
-    val activity = LocalContext.current as? Activity
+    val activity = LocalActivity.current
     val stores = viewModel<ScopedViewModelStores>()
     val owner = remember(stores, key) {
         object : ViewModelStoreOwner {

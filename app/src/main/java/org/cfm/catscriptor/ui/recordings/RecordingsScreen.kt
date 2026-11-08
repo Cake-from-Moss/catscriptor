@@ -63,6 +63,7 @@ import org.cfm.catscriptor.domain.app.RecordingSource
 import org.cfm.catscriptor.domain.app.RecordingStatus
 import org.cfm.catscriptor.domain.app.RecordingSummary
 import org.cfm.catscriptor.ui.components.AppIcons
+import org.cfm.catscriptor.ui.components.SwipeToRevealDelete
 import org.cfm.catscriptor.ui.components.formatTimecode
 import org.cfm.catscriptor.ui.theme.StenografDimens
 import org.cfm.catscriptor.ui.theme.StenografShapes
@@ -74,6 +75,7 @@ import org.cfm.catscriptor.viewmodel.recordings.RecordingsUiState
 class RecordingRowActions(
     val onOpen: (RecordingSummary) -> Unit,
     val onRename: (RecordingSummary) -> Unit,
+    val onCorrect: (RecordingSummary) -> Unit = {},
     val onExport: (RecordingSummary) -> Unit,
     val onDelete: (RecordingSummary) -> Unit,
 )
@@ -85,6 +87,7 @@ fun RecordingsScreen(
     onSearchChange: (String) -> Unit,
     onFilterChange: (RecordingFilter) -> Unit,
     onGoToRecord: () -> Unit,
+    onOpenSettings: () -> Unit,
     rowActions: RecordingRowActions,
     modifier: Modifier = Modifier,
 ) {
@@ -99,15 +102,22 @@ fun RecordingsScreen(
         contentPadding = PaddingValues(top = statusBars.calculateTopPadding(), bottom = bottomPadding),
     ) {
         item(key = "title", contentType = "title") {
-            Text(
-                stringResource(R.string.recordings_title),
-                style = StenografType.screenTitle,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .padding(horizontal = StenografDimens.ScreenPadding)
-                    .padding(top = 16.dp, bottom = 16.dp)
-                    .semantics { heading() },
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.recordings_title),
+                    style = StenografType.screenTitle,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = StenografDimens.ScreenPadding)
+                        .padding(top = 16.dp, bottom = 16.dp)
+                        .semantics { heading() },
+                )
+                IconButton(onClick = onOpenSettings) {
+                    Icon(AppIcons.Tune, contentDescription = stringResource(R.string.home_settings))
+                }
+                Spacer(Modifier.width(4.dp))
+            }
         }
         item(key = "search", contentType = "search") {
             SearchField(
@@ -154,12 +164,13 @@ fun RecordingsScreen(
                     )
                 }
                 items(group.items, key = { it.id }, contentType = { "row" }) { summary ->
+                    SwipeToRevealDelete(onDelete = { rowActions.onDelete(summary) }, onRename = { rowActions.onRename(summary) }, modifier = Modifier.animateItem()) {
                     RecordingRow(
                         summary = summary,
                         groupKey = group.key,
                         actions = rowActions,
-                        modifier = Modifier.animateItem(),
                     )
+                    }
                 }
             }
         }
@@ -362,6 +373,15 @@ private fun RowMenu(summary: RecordingSummary, actions: RecordingRowActions) {
                 leadingIcon = { Icon(AppIcons.Edit, contentDescription = null) },
                 onClick = { expanded = false; actions.onRename(summary) },
             )
+            if (summary.status == RecordingStatus.Ready || summary.status == RecordingStatus.AsrReady) {
+                DropdownMenuItem(
+                    text = {
+                        Text(stringResource(if (summary.textCorrected) R.string.recordings_menu_correct_again else R.string.recordings_menu_correct))
+                    },
+                    leadingIcon = { Icon(AppIcons.Edit, contentDescription = null) },
+                    onClick = { expanded = false; actions.onCorrect(summary) },
+                )
+            }
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.recordings_menu_export)) },
                 leadingIcon = { Icon(AppIcons.Share, contentDescription = null) },

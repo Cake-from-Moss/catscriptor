@@ -28,6 +28,9 @@ sealed interface RecorderState {
         val marksMs: List<Long>,
         val liveLines: List<LiveLine>,
         val pausedByInterruption: Boolean = false,
+        val liveStatus: String = "",
+        val liveRecognizing: Boolean = false,
+        val notes: List<RecordingNote> = emptyList(),
     ) : RecorderState
 }
 
@@ -49,8 +52,12 @@ interface RecorderController {
 
     /** Останавливает запись и ставит её в очередь обработки; возвращает id новой записи. */
     suspend fun stop(): String?
+    /** Удаляет текущую сессию без импорта и финального распознавания. */
+    suspend fun cancel()
     fun pause()
     fun resume()
     fun setLiveText(enabled: Boolean)
     fun addMark()
+    fun addNote(text: String, positionMs: Long? = null)
+    fun deleteNote(noteId: String)
 }

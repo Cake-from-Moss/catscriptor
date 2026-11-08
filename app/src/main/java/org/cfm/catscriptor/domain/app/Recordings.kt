@@ -28,6 +28,7 @@ data class RecordingSummary(
     val previewSpeakerName: String?,
     val previewText: String?,
     val status: RecordingStatus,
+    val textCorrected: Boolean = false,
 )
 
 enum class RecordingFilter { ALL, READY, PROCESSING }
@@ -37,6 +38,9 @@ data class RecordingQuery(val text: String = "", val filter: RecordingFilter = R
 
 /** Спикер расшифровки. [displayName] равен null, пока пользователь не задал имя. */
 data class SpeakerInfo(val id: String, val displayName: String?, val shareFraction: Float)
+
+/** Личная пометка к позиции аудио; не является частью распознанного текста или JSON экспорта. */
+data class RecordingNote(val id: String, val positionMs: Long, val text: String)
 
 /** Реплика для показа и правки. Таймкоды остаются исходными таймкодами ASR. */
 data class TranscriptLine(
@@ -59,6 +63,8 @@ data class TranscriptDocument(
     val asrDraft: List<org.cfm.catscriptor.domain.pipeline.AsrSegment>? = null,
     /** Спикеры реплик черновика по индексам [asrDraft]; null — диаризация не выполнялась. */
     val asrDraftSpeakers: List<String>? = null,
+    val notes: List<RecordingNote> = emptyList(),
+    val textCorrected: Boolean = false,
 ) {
     init {
         require(asrDraft == null || (lines.isEmpty() && speakers.isEmpty()))
@@ -98,4 +104,7 @@ interface RecordingRepository {
     suspend fun renameSpeaker(recordingId: String, speakerId: String, displayName: String)
     suspend fun editLineText(recordingId: String, lineId: String, text: String)
     suspend fun changeLineSpeaker(recordingId: String, lineId: String, speakerId: String)
+
+    suspend fun saveNote(recordingId: String, noteId: String?, positionMs: Long, text: String)
+    suspend fun deleteNote(recordingId: String, noteId: String)
 }

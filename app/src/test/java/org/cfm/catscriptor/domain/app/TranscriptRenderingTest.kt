@@ -76,11 +76,14 @@ class TranscriptRenderingTest {
 
     @Test
     fun prettyJsonMatchesStrictExporterSchemaAndKeepsCyrillic() {
-        val pretty = TranscriptRendering.renderJsonPretty(sample)
+        val annotated = sample.copy(notes = listOf(RecordingNote("note", 1000, "Личная пометка")))
+        val pretty = TranscriptRendering.renderJsonPretty(annotated)
         val output = ByteArrayOutputStream()
-        runBlocking { DefaultTranscriptExporter().export(sample.toPipelineTranscript(), TranscriptFormat.JSON, output) }
+        runBlocking { DefaultTranscriptExporter().export(annotated.toPipelineTranscript(), TranscriptFormat.JSON, output) }
         val strict = output.toString(Charsets.UTF_8.name())
         assertEquals(JsonParser.parseString(strict), JsonParser.parseString(pretty))
+        assertEquals(setOf("transcript"), JsonParser.parseString(strict).asJsonObject.keySet())
+        assertFalse(strict.contains("Личная пометка"))
         assertTrue(pretty.contains("Добрый день!"))
         assertFalse(pretty.contains("\\u"))
     }

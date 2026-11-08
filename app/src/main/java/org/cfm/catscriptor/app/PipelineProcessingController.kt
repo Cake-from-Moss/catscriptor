@@ -1,9 +1,12 @@
 package org.cfm.catscriptor.app
 
+import org.cfm.catscriptor.native.models.LlamaTextCorrector
+import org.cfm.catscriptor.domain.app.CorrectionLevel
 import android.content.Context
 import android.os.SystemClock
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
@@ -12,11 +15,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.cfm.catscriptor.audio.background.AudioProcessingController
 import org.cfm.catscriptor.audio.background.AudioProcessingPhase
 import org.cfm.catscriptor.audio.background.AudioProcessingState
+import org.cfm.catscriptor.domain.app.CorrectionProgress
 import org.cfm.catscriptor.domain.app.ImportResult
 import org.cfm.catscriptor.domain.app.ModelsStatus
 import org.cfm.catscriptor.domain.app.ProcessingController
@@ -42,9 +48,10 @@ internal class PipelineProcessingController(
     private val store: PipelineStore,
     /** Число спикеров из настроек, читается при старте каждой записи; null — автоопределение. */
     private val speakerCount: () -> Int? = { null },
+    private val correctionLevel: () -> CorrectionLevel = { CorrectionLevel.SMART },
 ) : ProcessingController {
 
-    private val dispatcher = Dispatchers.Default.limitedParallelism(1)
+    private val dispatcher = Dispatchers.IO.limitedParallelism(1)
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val models = MutableStateFlow<ModelsStatus>(ModelsStatus.Ready)
 
@@ -52,7 +59,16 @@ internal class PipelineProcessingController(
 
     /** Запись, которой принадлежит текущий RUNNING сервиса; null — сервис свободен. */
     private var currentId: String? = null
+    private var correctionRequest: CorrectionRequest? = null
+
+    private data class CorrectionRequest(
+        val id: String,
+        val source: List<org.cfm.catscriptor.domain.pipeline.Utterance>,
+        val completion: CompletableDeferred<Unit>,
+    )
     private var stageStartedAtMs = 0L
+    private val correctionProgress = MutableStateFlow<CorrectionProgress?>(null)
+    override val correction: StateFlow<CorrectionProgress?> = correctionProgress.asStateFlow()
 
     init {
         scope.launch(dispatcher) { models.value = checkModels() }
@@ -81,6 +97,7 @@ internal class PipelineProcessingController(
                 createdAtEpochMs = System.currentTimeMillis(),
                 durationMs = 0L,
                 status = RecordingStatus.Queued,
+                ownedAudioPath = ownedPath(documentUri),
             )
             store.upsert(entry)
             pump()
@@ -92,14 +109,58 @@ internal class PipelineProcessingController(
             // Запись уберёт коллектор по финальному CANCELLED сервиса.
             AudioProcessingController.cancel(appContext)
         } else {
-            store.remove(recordingId)
+            store.update(recordingId) { it.copy(status = RecordingStatus.Failed(ProcessingStage.PREPARE_AUDIO), prepareFailure = "Обработка отменена") }
         }
+    }
+
+    /** Ждёт закрытия PCM/JNI сервисом, прежде чем разрешить удаление исходного файла. */
+    suspend fun awaitDeletion(recordingId: String) = withContext(dispatcher) {
+        if (currentId == recordingId) {
+            AudioProcessingController.cancel(appContext)
+            AudioProcessingController.state.first { it.phase != AudioProcessingPhase.RUNNING }
+            // Коллектор терминального события завершит очередь на том же dispatcher.
+        }
+    }
+
+    fun resumeQueue() { scope.launch { pump() } }
+
+    private fun ownedPath(documentUri: String): String? {
+        val uri = android.net.Uri.parse(documentUri)
+        if (uri.scheme != "content" || uri.authority != "${appContext.packageName}.recordings") return null
+        val segments = uri.pathSegments
+        if (segments.size != 2 || segments[0] != "recordings") return null
+        val directory = java.io.File(appContext.filesDir, "recordings").canonicalFile
+        val file = java.io.File(directory, segments[1]).canonicalFile
+        return file.path.takeIf { file.parentFile == directory && file.isFile }
     }
 
     override suspend fun retry(recordingId: String) = withContext(dispatcher) {
         if (currentId == recordingId) return@withContext
-        store.update(recordingId) { it.copy(status = RecordingStatus.Queued, prepareFailure = null, processingState = null) }
+        store.update(recordingId) { it.copy(status = RecordingStatus.Queued, prepareFailure = null, processingState = null, textCorrected = false) }
         pump()
+    }
+
+    override suspend fun correctText(recordingId: String, level: CorrectionLevel) = withContext(dispatcher) {
+        check(currentId == null && AudioProcessingController.state.value.phase != AudioProcessingPhase.RUNNING) {
+            "Дождитесь завершения текущей обработки"
+        }
+        val entry = checkNotNull(store.entry(recordingId)?.takeIf { !it.hidden }) { "Запись не найдена" }
+        check(entry.status == RecordingStatus.Ready || entry.status == RecordingStatus.AsrReady) {
+            "Сначала дождитесь обработки записи"
+        }
+        val source = entry.correctionSource()
+        check(source.isNotEmpty()) { "В записи нет текста для правки" }
+        val completion = CompletableDeferred<Unit>()
+        correctionRequest = CorrectionRequest(recordingId, source, completion)
+        correctionProgress.value = CorrectionProgress(recordingId, entry.title, 0f)
+        currentId = recordingId
+        val seed = (entry.processingState ?: AudioProcessingState()).copy(
+            transcript = source, sampleCount = entry.durationMs * 16,
+        )
+        // Режим выбран пользователем для этой записи; общая настройка не затрагивается.
+        AudioProcessingController.startCorrection(appContext, seed, level.takeIf { it != CorrectionLevel.OFF } ?: CorrectionLevel.SMART)
+        // Ожидание не блокирует коллектор; старый готовый документ всё время доступен.
+        completion.await()
     }
 
     /**
@@ -117,6 +178,7 @@ internal class PipelineProcessingController(
         store.update(recordingId) {
             it.copy(
                 status = RecordingStatus.Ready,
+                textCorrected = false,
                 prepareFailure = null,
                 processingState = it.processingState?.copy(
                     phase = AudioProcessingPhase.COMPLETED,
@@ -131,6 +193,33 @@ internal class PipelineProcessingController(
 
     /** Терминальные фазы сервиса привязываются к текущей записи и запускают следующую в очереди. */
     private suspend fun onServiceState(state: AudioProcessingState) {
+        correctionRequest?.let { request ->
+            if (state.phase == AudioProcessingPhase.RUNNING) {
+                // Runner публикует границу последней исправленной реплики: это и есть доля аудио.
+                val processedMs = (state.stages.firstOrNull()?.status as? StageStatus.Running)?.processedMs ?: 0L
+                val totalMs = (state.sampleCount / 16).coerceAtLeast(1)
+                correctionProgress.update { it?.copy(fraction = (processedMs.toFloat() / totalMs).coerceIn(0f, 1f)) }
+            }
+            if (state.phase == AudioProcessingPhase.IDLE || state.phase == AudioProcessingPhase.RUNNING) return
+            try {
+                check(state.phase == AudioProcessingPhase.COMPLETED) {
+                    if (state.phase == AudioProcessingPhase.CANCELLED) "Пунктуация и правка отменены"
+                    else "Не удалось исправить текст. Исходная версия сохранена"
+                }
+                val result = checkNotNull(state.transcript)
+                check(store.entry(request.id) != null) { "Запись удалена" }
+                store.update(request.id) { it.withCorrectedText(request.source, result) }
+                request.completion.complete(Unit)
+            } catch (error: Exception) {
+                request.completion.completeExceptionally(error)
+            } finally {
+                correctionRequest = null
+                correctionProgress.value = null
+                currentId = null
+                pump()
+            }
+            return
+        }
         when (state.phase) {
             AudioProcessingPhase.IDLE -> Unit
             AudioProcessingPhase.RUNNING -> currentId?.let { id ->
@@ -154,6 +243,9 @@ internal class PipelineProcessingController(
                         status = if (state.transcript != null) RecordingStatus.Ready else RecordingStatus.AsrReady,
                         processingState = state,
                         durationMs = state.sampleCount * 1000L / PcmAudioSource.SAMPLE_RATE_HZ,
+                        textCorrected = state.stages.any {
+                            it.stage == ProcessingStage.CORRECT_TEXT && it.status is StageStatus.Done
+                        },
                         prepareElapsedMs = SystemClock.elapsedRealtime() - stageStartedAtMs,
                     )
                 }
@@ -175,7 +267,9 @@ internal class PipelineProcessingController(
             AudioProcessingPhase.CANCELLED -> {
                 val id = currentId
                 currentId = null
-                if (id != null) store.remove(id)
+                if (id != null) store.update(id) {
+                    it.copy(status = RecordingStatus.Failed(state.stage), prepareFailure = "Обработка отменена", processingState = state)
+                }
                 pump()
             }
         }
@@ -192,7 +286,7 @@ internal class PipelineProcessingController(
         store.update(next.id) {
             it.copy(status = RecordingStatus.Processing(RUN_FRACTION, ProcessingStage.PREPARE_AUDIO))
         }
-        AudioProcessingController.start(appContext, AudioInput(next.documentUri), speakerCount())
+        AudioProcessingController.start(appContext, AudioInput(next.documentUri), speakerCount(), correctionLevel())
     }
 
     /**
@@ -217,7 +311,7 @@ internal class PipelineProcessingController(
         return ProcessingJob(
             recordingId = id,
             title = title,
-            source = RecordingSource.FILE,
+            source = if (ownedAudioPath == null) RecordingSource.FILE else RecordingSource.MICROPHONE,
             fileExtension = fileExtension,
             durationMs = durationMs,
             overallFraction = when (status) {
@@ -244,6 +338,7 @@ internal class PipelineProcessingController(
                 "vad-manifest.properties" to { stream -> BundledModelSpec.readVad(stream) },
                 "diarization-manifest.properties" to { stream -> BundledModelSpec.readDiarization(stream) },
                 LLM_MANIFEST to { stream -> BundledModelSpec.readLlm(stream) },
+                LlamaTextCorrector.FAST_MANIFEST to { stream -> BundledModelSpec.readLlm(stream) },
             )
             for ((manifest, readSpec) in manifests) {
             val spec = appContext.assets.open(manifest).use(readSpec)
@@ -262,7 +357,7 @@ internal class PipelineProcessingController(
 
     private companion object {
         const val MODEL_MANIFEST = "model-manifest.properties"
-        const val LLM_MANIFEST = "llm-manifest.properties"
+        const val LLM_MANIFEST = LlamaTextCorrector.SMART_MANIFEST
         /** Минимальная доля запущенной записи: полоса прогресса сразу показывает, что работа идёт. */
         const val RUN_FRACTION = 0.01f
     }

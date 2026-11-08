@@ -1,5 +1,7 @@
 package org.cfm.catscriptor.app
 
+import org.cfm.catscriptor.domain.app.CorrectionLevel
+import org.cfm.catscriptor.domain.app.CorrectionProgress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,21 +60,26 @@ private object EmptyRecordingRepository : RecordingRepository {
     override suspend fun renameSpeaker(recordingId: String, speakerId: String, displayName: String) = Unit
     override suspend fun editLineText(recordingId: String, lineId: String, text: String) = Unit
     override suspend fun changeLineSpeaker(recordingId: String, lineId: String, speakerId: String) = Unit
+    override suspend fun saveNote(recordingId: String, noteId: String?, positionMs: Long, text: String) = Unit
+    override suspend fun deleteNote(recordingId: String, noteId: String) = Unit
 }
 
 private class UnavailableProcessingController : ProcessingController {
     override val modelsStatus: StateFlow<ModelsStatus> =
         MutableStateFlow(ModelsStatus.Unavailable(details = null))
+    override val correction: StateFlow<CorrectionProgress?> = MutableStateFlow(null)
 
     override fun observeJobs(): Flow<List<ProcessingJob>> = flowOf(emptyList())
     override suspend fun importFile(documentUri: String, displayName: String) = ImportResult.ModelsUnavailable
     override suspend fun cancel(recordingId: String) = Unit
     override suspend fun retry(recordingId: String) = Unit
+    override suspend fun correctText(recordingId: String, level: CorrectionLevel) { error("Модели недоступны") }
     override suspend fun skipStage(recordingId: String, stage: ProcessingStage) = Unit
 }
 
 /** internal: переиспользуются ProductionAppGraph до реализации #20/#21. */
 internal class UnavailableRecorderController : RecorderController {
+    override suspend fun cancel() = Unit
     override val isAvailable = false
     override val state: StateFlow<RecorderState> = MutableStateFlow(RecorderState.Idle)
     override suspend fun start(liveText: Boolean) = StartRecordingResult.Unavailable
@@ -81,6 +88,8 @@ internal class UnavailableRecorderController : RecorderController {
     override fun resume() = Unit
     override fun setLiveText(enabled: Boolean) = Unit
     override fun addMark() = Unit
+    override fun addNote(text: String, positionMs: Long?) = Unit
+    override fun deleteNote(noteId: String) = Unit
 }
 
 /** Плеер графа без бэкенда (UnavailableAppGraph). */

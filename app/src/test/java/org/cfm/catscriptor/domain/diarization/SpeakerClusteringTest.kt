@@ -133,6 +133,25 @@ class SpeakerClusteringTest {
     }
 
     @Test
+    fun shortRecordingKeepsOneVoiceAcrossDifferentPhrases() {
+        // Регрессия: диалог 12 с (9 окон, агломеративный режим). Один человек в двух репликах даёт
+        // косинус ≈ 0,45 между окнами разных реплик (внутри реплики окна почти совпадают), другой
+        // человек ортогонален. Порог 0,5 делил первого на двух «спикеров».
+        fun vector(vararg parts: Pair<Int, Float>) = FloatArray(8).also { v -> parts.forEach { (axis, value) -> v[axis] = value } }
+        val firstPhrase = vector(0 to 1f, 1 to 1.1f)
+        val otherVoice = vector(3 to 1f, 4 to 0.3f)
+        val secondPhrase = vector(0 to 1f, 2 to 1.1f)
+        val random = Random(7)
+        fun jitter(base: FloatArray) = FloatArray(8) { base[it] + (random.nextFloat() - 0.5f) * 0.02f }
+        val order = listOf(0, 0, 0, 1, 1, 1, 0, 0, 0)
+        val bases = listOf(firstPhrase, otherVoice, secondPhrase)
+        // Каждая реплика — 3 окна (2,25 с): не меньше minSpeakerMs, поэтому не поглощается как «мелкий» кластер.
+        val phrase = listOf(0, 0, 0, 1, 1, 1, 2, 2, 2)
+        val labels = SpeakerClustering().cluster(phrase.map { jitter(bases[it]) }, List(9) { 750L })
+        assertSamePartition(order, labels)
+    }
+
+    @Test
     fun shortInputUsesAgglomerativeMode() {
         val random = Random(5)
         val centers = voices(2, random)

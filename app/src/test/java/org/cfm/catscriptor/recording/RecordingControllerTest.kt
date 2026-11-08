@@ -7,6 +7,71 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RecordingControllerTest {
+    @Test fun liveNotesUsePauseClockAndSurviveStopHandoff() = runTest {
+        val file = File.createTempFile("notes-recording", ".wav")
+        var now = 0L
+        var saved: List<RecordingNote> = emptyList()
+        var savedId: String? = null
+        val controller = RecordingController({ true }, { Device() }, storage(file), { now },
+            { _, _ -> ImportResult.Accepted("recording") }, backgroundScope,
+            saveNotes = { id, notes -> savedId = id; saved = notes })
+        try {
+            controller.start(true)
+            now = 400
+            controller.addNote("  Важная мысль  ")
+            controller.pause()
+            now = 900
+            controller.addMark()
+            val notes = (controller.state.value as RecorderState.Active).notes
+            assertEquals(listOf(400L, 400L), notes.map { it.positionMs })
+            assertEquals("Важная мысль", notes.first().text)
+            controller.addNote("К началу набора", positionMs = 200)
+            assertEquals(200L, (controller.state.value as RecorderState.Active).notes.first().positionMs)
+            controller.deleteNote(notes.last().id)
+            assertEquals("recording", controller.stop())
+            assertEquals("recording", savedId)
+            assertEquals(listOf(200L, 400L), saved.map { it.positionMs })
+            assertEquals(notes.first(), saved.last())
+            assertEquals(RecorderState.Idle, controller.state.value)
+        } finally { file.delete() }
+    }
+
+    @Test fun cancelDiscardsLiveNotesAndNextSessionStartsEmpty() = runTest {
+        val file = File.createTempFile("notes-cancel", ".wav")
+        var saves = 0
+        val controller = RecordingController({ true }, { Device() }, storage(file), { 100 },
+            { _, _ -> error("Отмена без импорта") }, backgroundScope,
+            saveNotes = { _, _ -> saves++ })
+        try {
+            controller.start(true)
+            controller.addNote("Не сохранять")
+            controller.cancel()
+            controller.start(false)
+            assertTrue((controller.state.value as RecorderState.Active).notes.isEmpty())
+            controller.cancel()
+            assertEquals(0, saves)
+        } finally { file.delete() }
+    }
+
+    @Test fun cancelPausedRecordingDeletesWithoutImportAndIsIdempotent() = runTest {
+        val file = File.createTempFile("cancel-recording", ".wav")
+        val other = File.createTempFile("keep-recording", ".wav").apply { writeText("keep") }
+        val device = Device()
+        val controller = RecordingController({ true }, { device }, storage(file), { 0 },
+            { _, _ -> error("Отменённая запись не импортируется") }, backgroundScope)
+        try {
+            controller.start(true)
+            controller.pause()
+            controller.cancel()
+            controller.cancel()
+            assertNull(controller.stop())
+            assertFalse(file.exists())
+            assertEquals("keep", other.readText())
+            assertEquals(1, device.releases)
+            assertEquals(RecorderState.Idle, controller.state.value)
+        } finally { file.delete(); other.delete() }
+    }
+
     private class Device : RecordingDevice {
         var released = false
         var failStop = false

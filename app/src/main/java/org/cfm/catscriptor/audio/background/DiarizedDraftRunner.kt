@@ -28,6 +28,7 @@ internal class DiarizedDraftRunner(
     private val planner: SpeakerTurnPlanner = SpeakerTurnPlanner(),
     /** Тайминги этапов на устройстве; в JVM-тестах Android-лог недоступен — no-op. */
     private val logTiming: (String) -> Unit = {},
+    private val textCorrectionEnabled: Boolean = true,
 ) {
     suspend fun run(input: AudioInput, publish: (AudioProcessingState) -> Unit): AudioProcessingState {
         var state = AudioProcessingState(AudioProcessingPhase.RUNNING)
@@ -68,11 +69,17 @@ internal class DiarizedDraftRunner(
 
                 emit(ProcessingStage.TRANSCRIBE, 0)
                 val recognized = mutableListOf<AsrSegment>()
+                val partial = StringBuilder()
                 if (turns.isNotEmpty()) asrFactory().use { backend ->
                     for (turn in turns) {
                         currentCoroutineContext().ensureActive()
-                        recognized += backend.transcribe(pcm, SpeechSegment(turn.time))
-                        state = state.copy(partialText = recognized.map { it.text }.filter { it.isNotBlank() }.joinToString("\n"))
+                        val fragment = backend.transcribe(pcm, SpeechSegment(turn.time))
+                        recognized += fragment
+                        if (fragment.text.isNotBlank()) {
+                            if (partial.isNotEmpty()) partial.append('\n')
+                            partial.append(fragment.text)
+                        }
+                        state = state.copy(partialText = partial.toString())
                         emit(ProcessingStage.TRANSCRIBE, turn.time.endMs)
                     }
                 }
@@ -87,32 +94,44 @@ internal class DiarizedDraftRunner(
                     asrDraft = transcript.transcript.map { AsrSegment(TimeRange(it.startMs, it.endMs), it.text) },
                     speakerDraft = transcript.transcript,
                 )
-
-                // Финал: локальная LLM правит только текст, спикеров и таймкоды не трогает (#7).
-                // processedMs = 0, как у ASR: иначе прогресс этапа считался бы половиной веса,
-                // а после первой реплики откатывался назад.
-                emit(ProcessingStage.CORRECT_TEXT, 0)
-                val corrected = ArrayList<Utterance>(transcript.transcript.size)
-                if (transcript.transcript.isNotEmpty()) {
-                    correctorFactory().use { corrector ->
-                        for (utterance in transcript.transcript) {
-                            currentCoroutineContext().ensureActive()
-                            val text = corrector.correct(utterance)
-                            // Пустой ответ LLM не должен стирать распознанный текст.
-                            corrected += if (text.isBlank()) utterance else utterance.copy(text = text)
-                            emit(ProcessingStage.CORRECT_TEXT, utterance.endMs)
-                        }
-                    }
-                }
+            }
+            // Аудиокэш освобождён до загрузки LLM, спикеры и интервалы уже сохранены в черновике.
+            val draft = checkNotNull(state.speakerDraft)
+            if (!textCorrectionEnabled) {
                 currentCoroutineContext().ensureActive()
-                finish(ProcessingStage.CORRECT_TEXT)
-
-                state = state.copy(
+                stages[ProcessingStage.CORRECT_TEXT] = StageStatus.Skipped
+                return state.copy(
                     phase = AudioProcessingPhase.COMPLETED,
-                    transcript = corrected,
+                    stage = ProcessingStage.CORRECT_TEXT,
+                    transcript = draft,
                     stages = snapshot(),
                 )
             }
+
+            // Финал: локальная LLM правит только текст, спикеров и таймкоды не трогает (#7).
+            // processedMs = 0, как у ASR: иначе прогресс этапа считался бы половиной веса,
+            // а после первой реплики откатывался назад.
+            emit(ProcessingStage.CORRECT_TEXT, 0)
+            val corrected = ArrayList<Utterance>(draft.size)
+            if (draft.isNotEmpty()) {
+                correctorFactory().use { corrector ->
+                    for (utterance in draft) {
+                        currentCoroutineContext().ensureActive()
+                        val text = corrector.correct(utterance)
+                        // Пустой ответ LLM не должен стирать распознанный текст.
+                        corrected += if (text.isBlank()) utterance else utterance.copy(text = text)
+                        emit(ProcessingStage.CORRECT_TEXT, utterance.endMs)
+                    }
+                }
+            }
+            currentCoroutineContext().ensureActive()
+            finish(ProcessingStage.CORRECT_TEXT)
+
+            state = state.copy(
+                phase = AudioProcessingPhase.COMPLETED,
+                transcript = corrected,
+                stages = snapshot(),
+            )
             return state
         } catch (error: Exception) {
             // Текст исключения может содержать URI документа (см. AudioProcessingDiagnostics): в UI не отдаём.

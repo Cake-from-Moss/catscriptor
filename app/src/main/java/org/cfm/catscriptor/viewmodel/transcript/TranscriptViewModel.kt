@@ -41,6 +41,7 @@ data class TranscriptUiState(
     val lineMenu: TranscriptLine? = null,
     val dialog: TranscriptDialog? = null,
     val exportOpen: Boolean = false,
+    val noteError: String? = null,
 )
 
 class TranscriptViewModel(
@@ -81,6 +82,7 @@ class TranscriptViewModel(
                 lineMenu = local.lineMenu,
                 dialog = local.dialog,
                 exportOpen = local.exportOpen,
+                noteError = local.noteError,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TranscriptUiState())
 
@@ -204,6 +206,29 @@ class TranscriptViewModel(
 
     // Экспорт
 
+    fun saveNote(noteId: String?, positionMs: Long, text: String) {
+        if (state.value.document == null) return
+        mutateNotes { repository.saveNote(recordingId, noteId, positionMs, text) }
+    }
+
+    fun deleteNote(noteId: String) {
+        mutateNotes { repository.deleteNote(recordingId, noteId) }
+    }
+
+    fun dismissNoteError() = ui.update { it.copy(noteError = null) }
+
+    private fun mutateNotes(change: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                change()
+                dismissNoteError()
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                ui.update { it.copy(noteError = "Не удалось сохранить изменения пометок. Попробуйте ещё раз.") }
+            }
+        }
+    }
+
     fun onExportOpen() {
         if ((document.value as? TranscriptDocument)?.asrDraft != null) return
         ui.update { it.copy(exportOpen = true) }
@@ -218,6 +243,7 @@ class TranscriptViewModel(
         val lineMenu: TranscriptLine? = null,
         val dialog: TranscriptDialog? = null,
         val exportOpen: Boolean = false,
+        val noteError: String? = null,
     )
 
     private companion object {

@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import org.cfm.catscriptor.domain.app.AppSettings
+import org.cfm.catscriptor.domain.app.CorrectionLevel
 import org.cfm.catscriptor.domain.app.ExportFormat
 import org.cfm.catscriptor.domain.app.ModelsStatus
 import org.cfm.catscriptor.domain.app.ProcessingController
@@ -45,4 +46,6 @@ class SettingsViewModel(
     fun onExportFormatChange(format: ExportFormat) = repository.update { it.copy(defaultExportFormat = format) }
 
     fun onLiveTextChange(enabled: Boolean) = repository.update { it.copy(liveTextEnabled = enabled) }
+
+    fun onCorrectionLevelChange(level: CorrectionLevel) = repository.update { it.copy(correctionLevel = level) }
 }

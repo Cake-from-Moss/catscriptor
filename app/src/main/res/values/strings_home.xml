@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Шапка -->
-    <string name="home_title">Стенограф</string>
+    <string name="home_title">CatScriptor</string>
     <string name="home_settings">Настройки</string>
 
     <!-- Пилюля записи -->
@@ -62,13 +62,12 @@
     <string name="home_collapse">Свернуть в фон</string>
     <string name="home_retry">Повторить</string>
     <string name="home_skip_stage">Сохранить без этого этапа</string>
-    <string name="home_already_recognized">Уже распознано</string>
     <string name="home_expand_processing">Показать этапы обработки</string>
 
     <!-- Live-текст -->
     <string name="home_live_header">Текст записи</string>
     <string name="home_live_draft">черновик</string>
-    <string name="home_live_waiting">Текст появится после остановки записи · оставайтесь в приложении</string>
+    <string name="home_live_waiting">Говорите — Live-текст появится после распознавания фразы</string>
     <string name="home_jump_to_latest">К новому</string>
 
     <!-- Запись без Live-текста -->
