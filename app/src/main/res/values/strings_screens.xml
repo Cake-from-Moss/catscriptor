@@ -137,6 +137,7 @@
     <string name="export_speaker_names">Имена спикеров вместо ID</string>
     <string name="export_speaker_names_json">В JSON всегда speaker_N</string>
     <string name="export_with_audio">Сохранять с аудиофайлом</string>
+    <string name="export_audio_only">Только аудиофайл (без расшифровки)</string>
     <string name="export_share">Поделиться</string>
     <string name="export_save">Сохранить</string>
     <string name="export_saved">Сохранено: %1$s</string>

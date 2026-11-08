@@ -75,7 +75,7 @@ class ExportPlaybackEndToEndTest {
             // 2. Сохранение с аудио — ZIP с расшифровкой и байт-в-байт исходным файлом.
             val zipFile = recordingFile("e2e-export.zip").apply { writeText("") }
             val audioOptions = jsonOptions.copy(includeAudio = true)
-            assertEquals("Пример.zip", graph.export.saveTarget(document.title, audioOptions).fileName)
+            assertEquals("Пример.zip", graph.export.saveTarget(id, document.title, audioOptions).fileName)
             graph.export.saveTo(FileProvider.getUriForFile(context, authority, zipFile).toString(), id, audioOptions)
             val entries = HashMap<String, ByteArray>()
             ZipInputStream(zipFile.inputStream()).use { zip ->

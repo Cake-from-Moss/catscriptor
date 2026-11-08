@@ -41,7 +41,7 @@ data class ExportUiState(
     val actionsEnabled: Boolean get() = exportable && !busy && preview != null
 
     /** В JSON speaker_id всегда speaker_N, поэтому переключатель имён там ничего не меняет. */
-    val speakerNamesApplicable: Boolean get() = options.format != ExportFormat.JSON
+    val speakerNamesApplicable: Boolean get() = options.format != ExportFormat.JSON && !options.audioOnly
 }
 
 /** Разовые события для Route: системные окна и Snackbar открывает только UI. */
@@ -110,11 +110,13 @@ class ExportViewModel(
 
     fun onIncludeAudioChange(enabled: Boolean) = options.update { it.copy(includeAudio = enabled) }
 
+    fun onAudioOnlyChange(enabled: Boolean) = options.update { it.copy(audioOnly = enabled) }
+
     fun suggestedFileName(): String = saveTarget().fileName
 
     fun mimeType(): String = saveTarget().mimeType
 
-    private fun saveTarget() = gateway.saveTarget(document.value?.title.orEmpty(), options.value)
+    private fun saveTarget() = gateway.saveTarget(recordingId, document.value?.title.orEmpty(), options.value)
 
     fun onShare() = runExclusive {
         val opts = options.value
@@ -139,7 +141,7 @@ class ExportViewModel(
                 try {
                     check(document.value?.asrDraft == null && document.value != null)
                     val name = gateway.saveTo(documentUri, recordingId, opts)
-                    ExportEvent.Saved(name, documentUri, gateway.saveTarget(document.value?.title.orEmpty(), opts).mimeType)
+                    ExportEvent.Saved(name, documentUri, gateway.saveTarget(recordingId, document.value?.title.orEmpty(), opts).mimeType)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {

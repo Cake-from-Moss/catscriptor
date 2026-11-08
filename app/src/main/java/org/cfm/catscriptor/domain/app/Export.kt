@@ -17,11 +17,14 @@ data class SaveTarget(val fileName: String, val mimeType: String)
  * [useSpeakerNames] влияет только на TXT и SRT: в JSON всегда speaker_N (AGENTS.md).
  * [includeAudio]: «Сохранить» пишет ZIP с файлом расшифровки и исходным аудио,
  * «Поделиться» отправляет оба файла одним ACTION_SEND_MULTIPLE.
+ * [audioOnly]: экспортируется только исходный аудиофайл без расшифровки; [format],
+ * [useSpeakerNames] и [includeAudio] тогда игнорируются.
  */
 data class ExportOptions(
     val format: ExportFormat,
     val useSpeakerNames: Boolean,
     val includeAudio: Boolean = false,
+    val audioOnly: Boolean = false,
 )
 
 /** Экспорт расшифровки. JSON обязан идти через DefaultTranscriptExporter, схема не меняется. */
@@ -38,7 +41,7 @@ interface ExportGateway {
     fun suggestedFileName(title: String, format: ExportFormat): String
 
     /** Имя и тип документа для CreateDocument; без аудио — файл выбранного формата. */
-    fun saveTarget(title: String, options: ExportOptions): SaveTarget =
+    fun saveTarget(recordingId: String, title: String, options: ExportOptions): SaveTarget =
         SaveTarget(suggestedFileName(title, options.format), options.format.mimeType)
 }
 

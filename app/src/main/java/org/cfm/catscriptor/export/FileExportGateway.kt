@@ -3,6 +3,7 @@ package org.cfm.catscriptor.export
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import java.io.File
@@ -50,25 +51,28 @@ class FileExportGateway(
 
     override suspend fun saveTo(documentUri: String, recordingId: String, options: ExportOptions): String {
         val document = requireDocument(recordingId)
-        val source = if (options.includeAudio) requireAudio(recordingId) else null
+        val source = if (options.includeAudio || options.audioOnly) requireAudio(recordingId) else null
         val uri = documentUri.toUri()
         withContext(Dispatchers.IO) {
             val stream = context.contentResolver.openOutputStream(uri, "wt")
                 ?: throw IOException("Провайдер не открыл поток для $uri")
             stream.use { output ->
-                if (source == null) {
+                if (options.audioOnly) {
+                    copyAudio(source!!, output)
+                } else if (source == null) {
                     writeTranscript(document, options, output)
                 } else {
                     writeZip(document, options, source, output)
                 }
             }
         }
-        return displayName(uri) ?: saveTarget(document.title, options).fileName
+        return displayName(uri) ?: saveTarget(recordingId, document.title, options).fileName
     }
 
     override suspend fun prepareShare(recordingId: String, options: ExportOptions): SharePayload {
         val document = requireDocument(recordingId)
-        val source = if (options.includeAudio) requireAudio(recordingId) else null
+        val source = if (options.includeAudio || options.audioOnly) requireAudio(recordingId) else null
+        if (options.audioOnly) return shareAudioOnly(document, source!!)
         val files = withContext(Dispatchers.IO) {
             // Каталог чистится перед каждой отправкой: старые файлы в кэше никому не нужны.
             val directory = File(context.cacheDir, SHARE_DIR).apply {
@@ -93,11 +97,34 @@ class FileExportGateway(
         )
     }
 
+    private suspend fun shareAudioOnly(document: TranscriptDocument, source: ExportAudio): SharePayload {
+        val file = withContext(Dispatchers.IO) {
+            val directory = File(context.cacheDir, SHARE_DIR).apply {
+                deleteRecursively()
+                mkdirs()
+            }
+            File(directory, audioFileName(document.title, source)).also { target ->
+                target.outputStream().use { copyAudio(source, it) }
+            }
+        }
+        return SharePayload(
+            contentUri = FileProvider.getUriForFile(context, authority, file).toString(),
+            mimeType = audioMimeType(source),
+        )
+    }
+
+    private fun audioMimeType(source: ExportAudio): String =
+        source.extension?.let { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it.lowercase()) }
+            ?: "application/octet-stream"
+
     override fun suggestedFileName(title: String, format: ExportFormat): String =
         "${safeBaseName(title)}.${format.extension}"
 
-    override fun saveTarget(title: String, options: ExportOptions): SaveTarget =
-        if (options.includeAudio) {
+    override fun saveTarget(recordingId: String, title: String, options: ExportOptions): SaveTarget =
+        if (options.audioOnly) {
+            val source = audio(recordingId) ?: ExportAudio(uri = "", extension = null)
+            SaveTarget(audioFileName(title, source), audioMimeType(source))
+        } else if (options.includeAudio) {
             SaveTarget("${safeBaseName(title)}.zip", ZIP_MIME_TYPE)
         } else {
             SaveTarget(suggestedFileName(title, options.format), options.format.mimeType)
