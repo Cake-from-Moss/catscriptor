@@ -41,7 +41,7 @@ The Compose plugin version (`kotlin` in the catalog) must equal the Kotlin bundl
 Models:
 
 - ASR (team choice): sherpa-onnx + GigaAM. Pick the v3 variant (CTC or transducer, with or without punctuation) by WER and RTF.
-- Diarization (team decision, see docs/diarization.md): CAM++ embeddings of 1.5 s windows inside VAD speech (sherpa-onnx extractor) + spectral clustering in Kotlin; the pyannote + sherpa clustering pipeline was removed after it found 1 of 2 and 8 of 4 speakers.
+- Diarization (team decision, see docs/diarization.md): ERes2Net-base (3D-Speaker) embeddings of 1.5 s windows inside VAD speech (sherpa-onnx extractor) + spectral clustering in Kotlin; the pyannote + sherpa clustering pipeline was removed after it found 1 of 2 and 8 of 4 speakers.
 - Not final: VAD Silero; LLM small GGUF q4 (e.g. Qwen2.5 0.5B–1.5B) via llama.cpp or MediaPipe.
 
 ## Pipeline

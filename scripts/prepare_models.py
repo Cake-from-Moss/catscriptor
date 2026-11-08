@@ -69,7 +69,7 @@ def extract_engine(properties_path):
 
 
 def prepare_diarization():
-    """Эмбеддинги CAM++ 3D-Speaker (и при наличии — файлы из архива); проверка по SHA-256."""
+    """Эмбеддинги ERes2Net 3D-Speaker (и при наличии — файлы из архива); проверка по SHA-256."""
     manifest = properties(ROOT / "app/src/main/assets/diarization-manifest.properties")
     destination = ROOT / "app/src/main/assets" / manifest["model.directory"]
     destination.mkdir(parents=True, exist_ok=True)
