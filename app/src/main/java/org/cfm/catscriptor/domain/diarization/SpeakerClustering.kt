@@ -13,7 +13,10 @@ import kotlin.random.Random
  * @property minPruneNeighbors минимум соседей после pruning для коротких записей.
  * @property maxSpeakers верхняя граница числа спикеров при поиске eigengap.
  * @property minSpectralPoints меньше окон — агломеративная кластеризация: у eigengap мало данных.
- * @property ahcSimilarity порог средней косинусной близости для агломеративного режима.
+ * @property ahcSimilarity порог средней косинусной близости для агломеративного режима. CAM++ даёт для
+ *   одного человека в разных репликах близость 0,4–0,56, а для разных людей 0,2–0,4; прежние 0,5 дробили
+ *   один голос на нескольких «спикеров» в коротких записях (диалог 12 с давал 3 вместо 2). Верное число
+ *   спикеров на всех записях набора, где работает этот режим, получается при 0,35–0,40; выбрана середина.
  * @property mergeSimilarity кластеры с более близкими центроидами считаются одним голосом.
  * @property minSpeakerMs кластер с меньшей суммарной речью не считается отдельным спикером:
  *   его окна переходят к ближайшему крупному кластеру. Это главный барьер против «лишних» спикеров.
@@ -25,7 +28,7 @@ data class SpeakerClusteringSettings(
     val minPruneNeighbors: Int = 6,
     val maxSpeakers: Int = 10,
     val minSpectralPoints: Int = 10,
-    val ahcSimilarity: Double = 0.5,
+    val ahcSimilarity: Double = 0.375,
     val mergeSimilarity: Double = 0.8,
     val minSpeakerMs: Long = 2_000,
     val maxPoints: Int = 600,
