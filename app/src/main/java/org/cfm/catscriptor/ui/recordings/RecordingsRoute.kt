@@ -73,6 +73,7 @@ fun RecordingsRoute(graph: AppGraph, navigator: AppNavigator) {
         onSearchChange = viewModel::onSearchChange,
         onFilterChange = viewModel::onFilterChange,
         onGoToRecord = { navigator.openTab(TopTab.HOME) },
+        onOpenSettings = navigator.openSettings,
         rowActions = rowActions,
     )
 
@@ -87,24 +88,22 @@ fun RecordingsRoute(graph: AppGraph, navigator: AppNavigator) {
     }
 
     correctionTarget?.let { id ->
-        AlertDialog(
-            onDismissRequest = { correctionTarget = null },
-            title = { Text("Пунктуация и правка") },
-            text = { Text("Текущий текст будет исправлен. Таймкоды и спикеры останутся без изменений.") },
-            confirmButton = { TextButton(onClick = {
+        CorrectionDialog(
+            defaultLevel = graph.settings.settings.value.correctionLevel,
+            onDismiss = { correctionTarget = null },
+            onConfirm = { level ->
                 correctionTarget = null
                 correctingId = id
                 scope.launch {
                     snackbar.show(message = "Пунктуация и правка запущены")
                     try {
-                        graph.processing.correctText(id)
+                        graph.processing.correctText(id, level)
                         snackbar.show(message = "Текст обновлён")
                     } catch (error: CancellationException) { throw error }
                     catch (error: Exception) { snackbar.show(message = error.message ?: "Не удалось исправить текст") }
                     finally { correctingId = null }
                 }
-            }) { Text("Продолжить") } },
-            dismissButton = { TextButton(onClick = { correctionTarget = null }) { Text("Отмена") } },
+            },
         )
     }
 

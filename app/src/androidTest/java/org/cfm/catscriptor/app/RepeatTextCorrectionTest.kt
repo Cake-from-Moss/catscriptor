@@ -15,6 +15,7 @@ import org.cfm.catscriptor.MainActivity
 import org.cfm.catscriptor.audio.background.AudioProcessingController
 import org.cfm.catscriptor.audio.background.AudioProcessingPhase
 import org.cfm.catscriptor.audio.background.AudioProcessingState
+import org.cfm.catscriptor.domain.app.CorrectionLevel
 import org.cfm.catscriptor.domain.app.RecordingNote
 import org.cfm.catscriptor.domain.app.RecordingStatus
 import org.cfm.catscriptor.domain.app.ProcessingStage
@@ -43,7 +44,7 @@ class RepeatTextCorrectionTest {
         val started = SystemClock.elapsedRealtime()
         try {
             withTimeout(180_000) {
-                val correcting = async { controller.correctText(original.id) }
+                val correcting = async { controller.correctText(original.id, CorrectionLevel.FAST) }
                 while (AudioProcessingController.state.value.phase != AudioProcessingPhase.RUNNING && !correcting.isCompleted) delay(10)
                 // Переименование во время LLM не должно затеряться при коммите результата.
                 PipelineRecordingRepository(store).rename(original.id, "Новое название")
@@ -54,15 +55,6 @@ class RepeatTextCorrectionTest {
             val stored = checkNotNull(store.entry(original.id))
             assertTrue(stored.textCorrected)
             assertTrue(restored.textCorrected)
-            val serviceState = AudioProcessingController.state.value
-            try {
-                controller.correctText(original.id)
-                fail("Повторная коррекция готового текста должна быть запрещена")
-            } catch (expected: IllegalStateException) {
-                assertEquals("Текст уже прошёл пунктуацию и правку", expected.message)
-            }
-            assertEquals(stored, store.entry(original.id))
-            assertEquals(serviceState, AudioProcessingController.state.value)
             assertEquals("Новое название", restored.title)
             assertEquals(original.notes, restored.notes)
             assertEquals(original.speakerDisplayNames, restored.speakerDisplayNames)

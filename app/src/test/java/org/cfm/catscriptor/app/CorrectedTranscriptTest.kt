@@ -35,13 +35,21 @@ class CorrectedTranscriptTest {
         assertEquals(result, updated.displayedTranscript())
     }
 
+    @Test fun alreadyCorrectedTextCanBeCorrectedAgain() {
+        val once = entry.withCorrectedText(source, result)
+        val again = listOf(result.single().copy(text = "Привет, коты!"))
+        val twice = once.withCorrectedText(once.correctionSource(), again)
+        assertTrue(twice.textCorrected)
+        assertEquals(again, twice.displayedTranscript())
+        assertEquals(source, twice.processingState!!.speakerDraft)
+    }
+
     @Test fun rejectsConcurrentTextChangesHiddenRecordAndInvalidIntervals() {
         val invalid = listOf(result.single().copy(startMs = 101))
         for ((current, replacement) in listOf(
             entry.copy(editedTranscript = result) to result,
             entry.copy(hidden = true) to result,
             entry to invalid,
-            entry.copy(textCorrected = true) to result,
         )) {
             try { current.withCorrectedText(source, replacement); fail("Коммит должен быть отклонён") }
             catch (_: IllegalStateException) { }

@@ -15,12 +15,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.cfm.catscriptor.audio.background.AudioProcessingController
 import org.cfm.catscriptor.audio.background.AudioProcessingPhase
 import org.cfm.catscriptor.audio.background.AudioProcessingState
+import org.cfm.catscriptor.domain.app.CorrectionProgress
 import org.cfm.catscriptor.domain.app.ImportResult
 import org.cfm.catscriptor.domain.app.ModelsStatus
 import org.cfm.catscriptor.domain.app.ProcessingController
@@ -65,6 +67,8 @@ internal class PipelineProcessingController(
         val completion: CompletableDeferred<Unit>,
     )
     private var stageStartedAtMs = 0L
+    private val correctionProgress = MutableStateFlow<CorrectionProgress?>(null)
+    override val correction: StateFlow<CorrectionProgress?> = correctionProgress.asStateFlow()
 
     init {
         scope.launch(dispatcher) { models.value = checkModels() }
@@ -136,12 +140,11 @@ internal class PipelineProcessingController(
         pump()
     }
 
-    override suspend fun correctText(recordingId: String) = withContext(dispatcher) {
+    override suspend fun correctText(recordingId: String, level: CorrectionLevel) = withContext(dispatcher) {
         check(currentId == null && AudioProcessingController.state.value.phase != AudioProcessingPhase.RUNNING) {
             "Дождитесь завершения текущей обработки"
         }
         val entry = checkNotNull(store.entry(recordingId)?.takeIf { !it.hidden }) { "Запись не найдена" }
-        check(!entry.textCorrected) { "Текст уже прошёл пунктуацию и правку" }
         check(entry.status == RecordingStatus.Ready || entry.status == RecordingStatus.AsrReady) {
             "Сначала дождитесь обработки записи"
         }
@@ -149,13 +152,13 @@ internal class PipelineProcessingController(
         check(source.isNotEmpty()) { "В записи нет текста для правки" }
         val completion = CompletableDeferred<Unit>()
         correctionRequest = CorrectionRequest(recordingId, source, completion)
+        correctionProgress.value = CorrectionProgress(recordingId, entry.title, 0f)
         currentId = recordingId
         val seed = (entry.processingState ?: AudioProcessingState()).copy(
             transcript = source, sampleCount = entry.durationMs * 16,
         )
-        // Правка по явной просьбе при выключенной автоматической идёт на крупной модели.
-        val level = correctionLevel().takeIf { it != CorrectionLevel.OFF } ?: CorrectionLevel.SMART
-        AudioProcessingController.startCorrection(appContext, seed, level)
+        // Режим выбран пользователем для этой записи; общая настройка не затрагивается.
+        AudioProcessingController.startCorrection(appContext, seed, level.takeIf { it != CorrectionLevel.OFF } ?: CorrectionLevel.SMART)
         // Ожидание не блокирует коллектор; старый готовый документ всё время доступен.
         completion.await()
     }
@@ -191,6 +194,12 @@ internal class PipelineProcessingController(
     /** Терминальные фазы сервиса привязываются к текущей записи и запускают следующую в очереди. */
     private suspend fun onServiceState(state: AudioProcessingState) {
         correctionRequest?.let { request ->
+            if (state.phase == AudioProcessingPhase.RUNNING) {
+                // Runner публикует границу последней исправленной реплики: это и есть доля аудио.
+                val processedMs = (state.stages.firstOrNull()?.status as? StageStatus.Running)?.processedMs ?: 0L
+                val totalMs = (state.sampleCount / 16).coerceAtLeast(1)
+                correctionProgress.update { it?.copy(fraction = (processedMs.toFloat() / totalMs).coerceIn(0f, 1f)) }
+            }
             if (state.phase == AudioProcessingPhase.IDLE || state.phase == AudioProcessingPhase.RUNNING) return
             try {
                 check(state.phase == AudioProcessingPhase.COMPLETED) {
@@ -205,6 +214,7 @@ internal class PipelineProcessingController(
                 request.completion.completeExceptionally(error)
             } finally {
                 correctionRequest = null
+                correctionProgress.value = null
                 currentId = null
                 pump()
             }

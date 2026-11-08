@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,8 +34,10 @@ import kotlinx.coroutines.withContext
 import org.cfm.catscriptor.R
 import org.cfm.catscriptor.app.AppGraph
 import org.cfm.catscriptor.ui.navigation.AppNavigator
+import org.cfm.catscriptor.ui.recordings.CorrectionDialog
 import org.cfm.catscriptor.ui.navigation.LocalAppSnackbar
 import org.cfm.catscriptor.ui.navigation.TopTab
+import org.cfm.catscriptor.viewmodel.home.HomeContent
 import org.cfm.catscriptor.viewmodel.home.HomeEvent
 import org.cfm.catscriptor.viewmodel.home.HomeViewModel
 import org.cfm.catscriptor.domain.app.RecordingSummary
@@ -48,7 +51,12 @@ import androidx.compose.material3.TextButton
  * выбор файла) и Snackbar. Решений о данных здесь нет, только Android-обвязка.
  */
 @Composable
-fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest: Int) {
+fun HomeRoute(
+    graph: AppGraph,
+    navigator: AppNavigator,
+    processingDetailsRequest: Int,
+    onDetailsShownChange: (Boolean) -> Unit = {},
+) {
     val viewModel = viewModel { HomeViewModel(graph.recordings, graph.processing, graph.recorder, graph.settings) }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val signal = viewModel.signal.collectAsStateWithLifecycle()
@@ -59,6 +67,11 @@ fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest
     var renameTarget by remember { mutableStateOf<RecordingSummary?>(null) }
     var correctionTarget by remember { mutableStateOf<RecordingSummary?>(null) }
     var correctingId by remember { mutableStateOf<String?>(null) }
+
+    // Пока открыта развёрнутая карточка обработки, нижняя плашка прогресса не нужна.
+    val detailsShown = state.content is HomeContent.ProcessingDetail
+    LaunchedEffect(detailsShown) { onDetailsShownChange(detailsShown) }
+    DisposableEffect(Unit) { onDispose { onDetailsShownChange(false) } }
 
     LaunchedEffect(processingDetailsRequest) { viewModel.onDetailsRequest(processingDetailsRequest) }
 
@@ -178,24 +191,22 @@ fun HomeRoute(graph: AppGraph, navigator: AppNavigator, processingDetailsRequest
         )
     }
     correctionTarget?.let { recording ->
-        AlertDialog(
-            onDismissRequest = { correctionTarget = null },
-            title = { Text("Пунктуация и правка") },
-            text = { Text("Текущий текст будет исправлен. Таймкоды и спикеры останутся без изменений.") },
-            confirmButton = { TextButton(onClick = {
+        CorrectionDialog(
+            defaultLevel = graph.settings.settings.value.correctionLevel,
+            onDismiss = { correctionTarget = null },
+            onConfirm = { level ->
                 correctionTarget = null
                 correctingId = recording.id
                 scope.launch {
                     snackbar.show(message = "Пунктуация и правка запущены")
                     try {
-                        graph.processing.correctText(recording.id)
+                        graph.processing.correctText(recording.id, level)
                         snackbar.show(message = "Текст обновлён")
                     } catch (error: kotlinx.coroutines.CancellationException) { throw error }
                     catch (error: Exception) { snackbar.show(message = error.message ?: "Не удалось исправить текст") }
                     finally { correctingId = null }
                 }
-            }) { Text("Продолжить") } },
-            dismissButton = { TextButton(onClick = { correctionTarget = null }) { Text("Отмена") } },
+            },
         )
     }
 }

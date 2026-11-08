@@ -285,9 +285,11 @@ private fun RecentRow(summary: RecordingSummary, onClick: () -> Unit, onRename: 
                     leadingIcon = { Icon(AppIcons.Edit, contentDescription = null) },
                     onClick = { menuExpanded = false; onRename() },
                 )
-                if ((summary.status == RecordingStatus.Ready || summary.status == RecordingStatus.AsrReady) && !summary.textCorrected) {
+                if (summary.status == RecordingStatus.Ready || summary.status == RecordingStatus.AsrReady) {
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.recordings_menu_correct)) },
+                        text = {
+                            Text(stringResource(if (summary.textCorrected) R.string.recordings_menu_correct_again else R.string.recordings_menu_correct))
+                        },
                         leadingIcon = { Icon(AppIcons.Edit, contentDescription = null) },
                         onClick = { menuExpanded = false; onCorrect() },
                     )

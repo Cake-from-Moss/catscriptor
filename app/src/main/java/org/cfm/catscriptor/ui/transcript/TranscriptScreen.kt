@@ -86,11 +86,13 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import org.cfm.catscriptor.R
+import org.cfm.catscriptor.domain.app.CorrectionLevel
 import org.cfm.catscriptor.domain.app.SpeakerInfo
 import org.cfm.catscriptor.domain.app.TranscriptDocument
 import org.cfm.catscriptor.domain.app.TranscriptLine
 import org.cfm.catscriptor.ui.components.AppIcons
 import org.cfm.catscriptor.ui.components.formatTimecode
+import org.cfm.catscriptor.ui.recordings.CorrectionDialog
 import org.cfm.catscriptor.ui.recordings.dateTimeLabel
 import org.cfm.catscriptor.ui.recordings.speakerName
 import org.cfm.catscriptor.ui.theme.StenografDimens
@@ -118,7 +120,8 @@ class TranscriptActions(
     val onReturnToCurrent: () -> Unit,
     val onSaveNote: (String?, Long, String) -> Unit = { _, _, _ -> },
     val onDeleteNote: (String) -> Unit = {},
-    val onCorrectText: () -> Unit = {},
+    val defaultCorrectionLevel: CorrectionLevel = CorrectionLevel.SMART,
+    val onCorrectText: (CorrectionLevel) -> Unit = {},
     val player: PlayerActions,
 )
 
@@ -139,7 +142,6 @@ fun TranscriptScreen(
     var noteText by rememberSaveable { mutableStateOf("") }
     var notePositionMs by rememberSaveable { mutableLongStateOf(0L) }
     var correctionConfirm by rememberSaveable { mutableStateOf(false) }
-    var transcriptMenuExpanded by rememberSaveable { mutableStateOf(false) }
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         TopBar(
             document = document,
@@ -150,16 +152,12 @@ fun TranscriptScreen(
             focusedMatch = state.search.focusedIndex,
             actions = actions,
             onCorrect = { correctionConfirm = true },
-            menuExpanded = transcriptMenuExpanded,
-            onMenuExpandedChange = { transcriptMenuExpanded = it },
         )
         if (correctionConfirm) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { correctionConfirm = false },
-                title = { Text("Пунктуация и правка") },
-                text = { Text("Текущий текст будет исправлен. Таймкоды и спикеры останутся без изменений.") },
-                confirmButton = { androidx.compose.material3.TextButton(onClick = { correctionConfirm = false; actions.onCorrectText() }) { Text("Продолжить") } },
-                dismissButton = { androidx.compose.material3.TextButton(onClick = { correctionConfirm = false }) { Text("Отмена") } },
+            CorrectionDialog(
+                defaultLevel = actions.defaultCorrectionLevel,
+                onDismiss = { correctionConfirm = false },
+                onConfirm = { level -> correctionConfirm = false; actions.onCorrectText(level) },
             )
         }
         when {
@@ -278,8 +276,6 @@ private fun TopBar(
     focusedMatch: Int,
     actions: TranscriptActions,
     onCorrect: () -> Unit,
-    menuExpanded: Boolean,
-    onMenuExpandedChange: (Boolean) -> Unit,
 ) {
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Row(
@@ -324,18 +320,20 @@ private fun TopBar(
                         }
                     }
                     if (document != null && !draft) {
-                        if (!document.textCorrected) {
-                            Box {
-                                IconButton(onClick = { onMenuExpandedChange(true) }) {
-                                    Icon(AppIcons.More, contentDescription = stringResource(R.string.recordings_more, document.title))
-                                }
-                                DropdownMenu(expanded = menuExpanded, onDismissRequest = { onMenuExpandedChange(false) }) {
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.recordings_menu_correct)) },
-                                        leadingIcon = { Icon(AppIcons.Edit, contentDescription = null) },
-                                        onClick = { onMenuExpandedChange(false); onCorrect() },
-                                    )
-                                }
+                        // Подписанная пилюля понятнее безымянного значка карандаша.
+                        Surface(
+                            onClick = onCorrect,
+                            shape = StenografShapes.Pill,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 4.dp).height(32.dp),
+                        ) {
+                            Box(Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    stringResource(R.string.correction_chip),
+                                    style = StenografType.label,
+                                    maxLines = 1,
+                                )
                             }
                         }
                         IconButton(onClick = actions.onSearchOpen) {

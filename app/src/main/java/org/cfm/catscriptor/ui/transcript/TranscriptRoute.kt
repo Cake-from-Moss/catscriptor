@@ -63,13 +63,14 @@ fun TranscriptRoute(graph: AppGraph, navigator: AppNavigator, recordingId: Strin
             onReturnToCurrent = viewModel::onReturnToCurrent,
             onSaveNote = viewModel::saveNote,
             onDeleteNote = viewModel::deleteNote,
-            onCorrectText = {
+            defaultCorrectionLevel = graph.settings.settings.value.correctionLevel,
+            onCorrectText = { level ->
                 if (correcting) return@TranscriptActions
                 correcting = true
                 scope.launch {
                     snackbar.show(message = "Пунктуация и правка запущены")
                     try {
-                        graph.processing.correctText(recordingId)
+                        graph.processing.correctText(recordingId, level)
                         snackbar.show(message = "Текст обновлён")
                     } catch (error: kotlinx.coroutines.CancellationException) { throw error }
                     catch (error: Exception) { snackbar.show(message = error.message ?: "Не удалось исправить текст") }

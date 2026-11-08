@@ -1,5 +1,7 @@
 package org.cfm.catscriptor.viewmodel.home
 
+import org.cfm.catscriptor.domain.app.CorrectionLevel
+import org.cfm.catscriptor.domain.app.CorrectionProgress
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -318,6 +320,7 @@ private class FakeProcessing : ProcessingController {
     val imports = mutableListOf<Pair<String, String>>()
     val cancelled = mutableListOf<String>()
     override val modelsStatus: StateFlow<ModelsStatus> = MutableStateFlow(ModelsStatus.Ready)
+    override val correction: StateFlow<CorrectionProgress?> = MutableStateFlow(null)
     override fun observeJobs(): Flow<List<ProcessingJob>> = jobs
     override suspend fun importFile(documentUri: String, displayName: String): ImportResult {
         imports += documentUri to displayName
@@ -327,7 +330,7 @@ private class FakeProcessing : ProcessingController {
         cancelled += recordingId
     }
     override suspend fun retry(recordingId: String) = Unit
-    override suspend fun correctText(recordingId: String) = Unit
+    override suspend fun correctText(recordingId: String, level: CorrectionLevel) = Unit
     override suspend fun skipStage(recordingId: String, stage: ProcessingStage) = Unit
 }
 

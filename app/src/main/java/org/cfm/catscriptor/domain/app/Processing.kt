@@ -48,9 +48,15 @@ sealed interface ImportResult {
     data object ModelsUnavailable : ImportResult
 }
 
+/** Ход повторной правки текста готовой записи; [fraction] — доля обработанного аудио от 0 до 1. */
+data class CorrectionProgress(val recordingId: String, val title: String, val fraction: Float)
+
 /** Очередь обработки. Реальная реализация запускает Foreground Service и пайплайн. */
 interface ProcessingController {
     val modelsStatus: StateFlow<ModelsStatus>
+
+    /** Идущая сейчас правка текста готовой записи; null, если её нет. */
+    val correction: StateFlow<CorrectionProgress?>
 
     /** Задачи в порядке очереди; активная идёт первой. */
     fun observeJobs(): Flow<List<ProcessingJob>>
@@ -60,8 +66,12 @@ interface ProcessingController {
     suspend fun cancel(recordingId: String)
     suspend fun retry(recordingId: String)
 
-    /** Только локальная пунктуация и правка сохранённого текста, без повторного ASR. */
-    suspend fun correctText(recordingId: String)
+    /**
+     * Только локальная пунктуация и правка сохранённого текста, без повторного ASR.
+     * [level] действует лишь на этот запуск и не меняет настройки; допустимо повторять
+     * на уже исправленной записи. [CorrectionLevel.OFF] означает «умная».
+     */
+    suspend fun correctText(recordingId: String, level: CorrectionLevel)
 
     /** «Сохранить без этого этапа», например без пунктуации. */
     suspend fun skipStage(recordingId: String, stage: ProcessingStage)

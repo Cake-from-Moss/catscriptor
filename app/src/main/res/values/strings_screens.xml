@@ -158,6 +158,17 @@
     <string name="settings_language_ru">Русский</string>
     <string name="settings_language_ru_body">Модель распознавания поддерживает только русский</string>
     <string name="settings_speakers">Число спикеров</string>
+    <string name="settings_speakers_title">Ожидаемое число голосов</string>
+    <string name="correction_dialog_title">Пунктуация и правка</string>
+    <string name="correction_dialog_body">Выберите режим для этой записи. Настройки приложения не изменятся. Таймкоды и спикеры останутся без изменений.</string>
+    <string name="correction_progress">Пунктуация и правка · %1$d%%</string>
+    <string name="processing_progress">Обработка · %1$d%%</string>
+    <string name="processing_progress_failed">Ошибка обработки</string>
+    <string name="correction_progress_hide">Скрыть</string>
+    <string name="correction_chip">Пунктуация</string>
+    <string name="correction_action">Пунктуация и правка</string>
+    <string name="correction_dialog_run">Запустить</string>
+    <string name="recordings_menu_correct_again">Повторить правку</string>
     <string name="settings_speakers_auto">Авто</string>
     <string name="settings_speakers_auto_body">Определять по записи</string>
     <string name="settings_export">Формат экспорта по умолчанию</string>

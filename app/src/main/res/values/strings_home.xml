@@ -62,7 +62,6 @@
     <string name="home_collapse">Свернуть в фон</string>
     <string name="home_retry">Повторить</string>
     <string name="home_skip_stage">Сохранить без этого этапа</string>
-    <string name="home_already_recognized">Уже распознано</string>
     <string name="home_expand_processing">Показать этапы обработки</string>
 
     <!-- Live-текст -->

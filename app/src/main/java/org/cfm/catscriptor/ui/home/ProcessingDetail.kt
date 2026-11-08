@@ -62,7 +62,7 @@ import org.cfm.catscriptor.ui.theme.LocalReduceMotion
 import org.cfm.catscriptor.ui.theme.StenografShapes
 import org.cfm.catscriptor.ui.theme.StenografType
 
-/** После «Стоп» или импорта: карточка этапов и «Уже распознано». */
+/** После «Стоп» или импорта: карточка этапов. */
 @Composable
 internal fun ProcessingDetail(
     job: ProcessingJob,
@@ -84,20 +84,6 @@ internal fun ProcessingDetail(
                 onOpenResult = onOpenResult,
                 modifier = Modifier.padding(top = 8.dp),
             )
-        }
-        if (job.partialText.isNotBlank()) {
-            item(key = "partialHeader") {
-                SectionLabel(stringResource(R.string.home_already_recognized), Modifier.padding(top = 8.dp))
-            }
-            item(key = "partial") {
-                // Текст дописывается по мере распознавания; высота растёт плавно, без скачков.
-                Text(
-                    job.partialText,
-                    style = StenografType.body,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.fillMaxWidth().animateContentSize(),
-                )
-            }
         }
     }
 }

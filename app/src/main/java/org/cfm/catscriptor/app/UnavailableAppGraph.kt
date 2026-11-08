@@ -1,5 +1,7 @@
 package org.cfm.catscriptor.app
 
+import org.cfm.catscriptor.domain.app.CorrectionLevel
+import org.cfm.catscriptor.domain.app.CorrectionProgress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,12 +67,13 @@ private object EmptyRecordingRepository : RecordingRepository {
 private class UnavailableProcessingController : ProcessingController {
     override val modelsStatus: StateFlow<ModelsStatus> =
         MutableStateFlow(ModelsStatus.Unavailable(details = null))
+    override val correction: StateFlow<CorrectionProgress?> = MutableStateFlow(null)
 
     override fun observeJobs(): Flow<List<ProcessingJob>> = flowOf(emptyList())
     override suspend fun importFile(documentUri: String, displayName: String) = ImportResult.ModelsUnavailable
     override suspend fun cancel(recordingId: String) = Unit
     override suspend fun retry(recordingId: String) = Unit
-    override suspend fun correctText(recordingId: String) { error("Модели недоступны") }
+    override suspend fun correctText(recordingId: String, level: CorrectionLevel) { error("Модели недоступны") }
     override suspend fun skipStage(recordingId: String, stage: ProcessingStage) = Unit
 }
 

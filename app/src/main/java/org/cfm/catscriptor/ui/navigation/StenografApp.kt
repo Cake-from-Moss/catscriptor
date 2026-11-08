@@ -20,6 +20,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +34,10 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.map
 import org.cfm.catscriptor.app.AppGraph
+import androidx.compose.ui.res.stringResource
+import org.cfm.catscriptor.R
+import org.cfm.catscriptor.domain.app.StageStatus
+import org.cfm.catscriptor.ui.components.ProgressBanner
 import org.cfm.catscriptor.ui.home.HomeRoute
 import org.cfm.catscriptor.ui.recordings.RecordingsRoute
 import org.cfm.catscriptor.ui.settings.SettingsRoute
@@ -51,8 +56,22 @@ fun StenografApp(graph: AppGraph) {
     val hostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val snackbar = remember(hostState, scope) { AppSnackbar(hostState, scope) }
-    val hasJobs by remember(graph) { graph.processing.observeJobs().map { it.isNotEmpty() } }
-        .collectAsState(initial = false)
+    val jobs by graph.processing.observeJobs().collectAsState(initial = emptyList())
+    val hasJobs = jobs.isNotEmpty()
+    var detailsShown by remember { mutableStateOf(false) }
+    var hiddenJobId by remember { mutableStateOf<String?>(null) }
+    // Первая задача в очереди активна; упавшую показывает карточка на главном экране.
+    val activeJob = jobs.firstOrNull()?.takeIf { job -> job.stages.none { it.status is StageStatus.Failed } }
+    LaunchedEffect(activeJob?.recordingId) { hiddenJobId = null }
+
+    val correction by graph.processing.correction.collectAsState()
+    // Скрытие действует до конца текущей правки; новая правка снова показывает плашку.
+    var hiddenCorrectionId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(correction == null) { if (correction == null) hiddenCorrectionId = null }
+    val showCorrection = correction != null && hiddenCorrectionId != correction?.recordingId
+    val showJob = !showCorrection && correction == null && activeJob != null && !detailsShown &&
+        hiddenJobId != activeJob.recordingId
+    val bannerVisible = showCorrection || showJob
 
     val navigator = remember {
         AppNavigator(
@@ -84,7 +103,7 @@ fun StenografApp(graph: AppGraph) {
                 modifier = if (child != null) Modifier.clearAndSetSemantics {} else Modifier,
             ) { current ->
                 when (current) {
-                    TopTab.HOME -> HomeRoute(graph, navigator, processingDetailsRequest)
+                    TopTab.HOME -> HomeRoute(graph, navigator, processingDetailsRequest) { detailsShown = it }
                     TopTab.RECORDINGS -> RecordingsRoute(graph, navigator)
                 }
             }
@@ -130,23 +149,59 @@ fun StenografApp(graph: AppGraph) {
                 }
             }
 
-            // Snackbar поднимается над навигацией и не перекрывает её.
+            // Над навигацией (или над плеером расшифровки) и над Snackbar не мешает друг другу.
+            val baseOffset = when (child) {
+                null -> StenografDimens.BottomBarHeight + StenografDimens.BottomBarMargin + 8.dp
+                is ChildScreen.Transcript -> PLAYER_CLEARANCE
+                else -> 8.dp
+            }
+            AnimatedVisibility(
+                visible = bannerVisible,
+                enter = fadeIn(tween(StenografMotion.FADE_IN_MS)),
+                exit = fadeOut(tween(StenografMotion.FADE_SHORT_MS)),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(start = StenografDimens.ScreenPadding, end = StenografDimens.ScreenPadding, bottom = baseOffset),
+            ) {
+                // Размеры плашки не прыгают при смене содержимого: слот один на обе задачи.
+                val current = correction
+                val job = activeJob
+                if (current != null) {
+                    ProgressBanner(
+                        label = stringResource(R.string.correction_progress, (current.fraction * 100).toInt()),
+                        title = current.title,
+                        fraction = current.fraction,
+                        onHide = { hiddenCorrectionId = current.recordingId },
+                    )
+                } else if (job != null) {
+                    ProgressBanner(
+                        label = stringResource(R.string.processing_progress, (job.overallFraction.coerceIn(0f, 1f) * 100).toInt()),
+                        title = job.title,
+                        fraction = job.overallFraction,
+                        onHide = { hiddenJobId = job.recordingId },
+                        onClick = navigator.showProcessingDetails,
+                    )
+                }
+            }
+
+            // Snackbar поднимается над навигацией и плашкой и не перекрывает их.
             SnackbarHost(
                 hostState,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(
-                        bottom = if (child == null) {
-                            StenografDimens.BottomBarHeight + StenografDimens.BottomBarMargin + 8.dp
-                        } else {
-                            8.dp
-                        },
-                    ),
+                    .padding(bottom = baseOffset + if (bannerVisible) BANNER_HEIGHT else 0.dp),
             )
         }
     }
 }
+
+/** Запас под плеером расшифровки, чтобы плашка правки не закрывала его. */
+private val PLAYER_CLEARANCE = 150.dp
+
+/** Высота плашки правки с зазором: на столько поднимается Snackbar. */
+private val BANNER_HEIGHT = 80.dp
 
 /** Fade through из Material motion: старый экран исчезает быстрее, чем появляется новый. */
 private fun fadeThrough() =
